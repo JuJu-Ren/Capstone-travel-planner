@@ -2,42 +2,42 @@ const destinations = [
   {
     id: 1,
     name: 'Paris, France',
-    image: 'https://via.placeholder.com/300x200?text=Paris',
+    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&h=250&fit=crop',
     rating: 4.8,
     trips: 1240
   },
   {
     id: 2,
     name: 'Tokyo, Japan',
-    image: 'https://via.placeholder.com/300x200?text=Tokyo',
+    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&h=250&fit=crop',
     rating: 4.9,
     trips: 980
   },
   {
     id: 3,
     name: 'New York, USA',
-    image: 'https://via.placeholder.com/300x200?text=NewYork',
+    image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&h=250&fit=crop',
     rating: 4.7,
     trips: 1520
   },
   {
     id: 4,
     name: 'Barcelona, Spain',
-    image: 'https://via.placeholder.com/300x200?text=Barcelona',
+    image: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=400&h=250&fit=crop',
     rating: 4.6,
     trips: 890
   },
   {
     id: 5,
     name: 'Dubai, UAE',
-    image: 'https://via.placeholder.com/300x200?text=Dubai',
+    image: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=400&h=250&fit=crop',
     rating: 4.5,
     trips: 750
   },
   {
     id: 6,
     name: 'Sydney, Australia',
-    image: 'https://via.placeholder.com/300x200?text=Sydney',
+    image: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=400&h=250&fit=crop',
     rating: 4.8,
     trips: 650
   }
