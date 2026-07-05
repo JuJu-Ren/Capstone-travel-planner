@@ -183,9 +183,9 @@ function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, ke
 
 function makeStationPill(name: string, color: string, selected: boolean, selIdx: number): L.DivIcon {
   const bg    = selected ? '#fffbeb' : '#ffffff'
-  const bdr   = selected ? '#f59e0b' : color
+  const bdr   = selected ? '#f59e0b' : '#7c3aed'
   const txt   = selected ? '#78350f' : '#0f172a'
-  const dot   = selected ? '#f59e0b' : color
+  const dot   = selected ? '#f59e0b' : '#7c3aed'
   const label = name.length > 20 ? name.slice(0, 20) + '…' : name
   const w     = Math.min(label.length * 7.8 + 34, 190)
 
@@ -217,9 +217,9 @@ function makeStationPill(name: string, color: string, selected: boolean, selIdx:
 
 function makeHubPill(name: string, color: string, selected: boolean, selIdx: number): L.DivIcon {
   const bg  = selected ? '#fffbeb' : '#ffffff'
-  const bdr = selected ? '#f59e0b' : color
+  const bdr = selected ? '#f59e0b' : '#7c3aed'
   const txt = selected ? '#78350f' : '#1e293b'
-  const dot = selected ? '#f59e0b' : color
+  const dot = selected ? '#f59e0b' : '#7c3aed'
   const label = name.length > 17 ? name.slice(0, 17) + '…' : name
   const w   = Math.min(label.length * 7 + 26, 155)
 
@@ -246,18 +246,19 @@ function makeHubPill(name: string, color: string, selected: boolean, selIdx: num
   })
 }
 
-function makeDot(color: string, size: number, selected: boolean): L.DivIcon {
-  const bdr = selected ? '#b45309' : 'rgba(255,255,255,0.9)'
-  const bg  = selected ? '#f59e0b' : color
+function makeDot(_color: string, size: number, selected: boolean): L.DivIcon {
+  const s2  = size * 2
+  const bg  = selected ? '#f59e0b' : '#7c3aed'
+  const bdr = selected ? '#b45309' : 'white'
   return L.divIcon({
     className: '',
     html: `<div style="
-      width:${size}px;height:${size}px;border-radius:50%;
-      background:${bg};border:2px solid ${bdr};
-      box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer;
+      width:${s2}px;height:${s2}px;border-radius:50%;
+      background:${bg};border:3px solid ${bdr};
+      box-shadow:0 1px 6px rgba(0,0,0,.45);cursor:pointer;
     "></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+    iconSize: [s2, s2],
+    iconAnchor: [s2 / 2, s2 / 2],
   })
 }
 
@@ -288,6 +289,7 @@ interface Props {
 export default function TrainMap({ selectedStops, onSelectStop, userLocation }: Props) {
   const [zoom, setZoom] = useState(NY_ZOOM)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [showLines, setShowLines] = useState(true)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isSelected = (id: string) => selectedStops.some(s => s.id === id)
@@ -307,6 +309,24 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
   const handleOut  = () => startClose()
 
   return (
+    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+      {/* Train route toggle */}
+      <button
+        onClick={() => setShowLines(l => !l)}
+        style={{
+          position: 'absolute', top: 12, right: 12, zIndex: 1000,
+          background: showLines ? '#7c3aed' : 'white',
+          color: showLines ? 'white' : '#7c3aed',
+          border: '2px solid #7c3aed',
+          borderRadius: 20, padding: '5px 14px',
+          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+          fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif',
+        }}
+      >
+        {showLines ? '🚂 Routes On' : '🚂 Routes Off'}
+      </button>
+
     <MapContainer
       center={NY_CENTER}
       zoom={NY_ZOOM}
@@ -325,15 +345,15 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
       <ZoomTracker onZoom={setZoom} />
 
       {/* Amtrak lines */}
-      {trainLines.map(line => (
-        <Polyline key={line.id} positions={line.stops} color={line.color}
-          weight={zoom >= 9 ? 1.5 : 2.5} opacity={zoom >= 9 ? 0.35 : 0.7} />
+      {showLines && trainLines.map(line => (
+        <Polyline key={line.id} positions={line.stops} color="#7c3aed"
+          weight={zoom >= 9 ? 3 : 4.5} opacity={0.2} />
       ))}
 
       {/* MTA lines */}
-      {mtaLines.map(line => (
-        <Polyline key={line.id} positions={line.coords} color={line.color}
-          weight={zoom >= 11 ? 3 : 2} opacity={0.85} />
+      {showLines && mtaLines.map(line => (
+        <Polyline key={line.id} positions={line.coords} color="#7c3aed"
+          weight={zoom >= 11 ? 5 : 4} opacity={0.2} />
       ))}
 
       {/* MTA stops */}
@@ -405,5 +425,6 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
         )
       })}
     </MapContainer>
+    </div>
   )
 }

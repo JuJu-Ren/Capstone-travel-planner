@@ -2,33 +2,75 @@ import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import type { TripStop } from '../data/types'
+import type { GeminiModel } from './PromptSection'
 
-const POI_ICONS: Record<string, string> = {
-  food: '🍜',
-  art: '🎨',
-  history: '🏛',
-  nature: '🌿',
-  event: '🎉',
-  shopping: '🛍',
-  museum: '🖼',
-  nightlife: '🌙',
-  culture: '🎭',
-  photography: '📷',
-  default: '📍',
+// ─── API keys (set in .env) ───────────────────────────────────────────────────
+const OW_KEY  = import.meta.env.VITE_OPENWEATHER_KEY  as string
+const FSQ_KEY = import.meta.env.VITE_FOURSQUARE_KEY   as string
+const GEM_KEY = import.meta.env.VITE_GEMINI_KEY       as string
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Weather {
+  temp: number
+  feels: number
+  desc: string
+  icon: string
+  humidity: number
+  wind: number
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  food: 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700',
-  art: 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
-  history: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700',
-  nature: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700',
-  event: 'bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-700',
-  shopping: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700',
-  museum: 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700',
-  nightlife: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-700',
-  culture: 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-700',
-  photography: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-700',
-  default: 'bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600',
+export interface FoursquarePOI {
+  id: string
+  name: string
+  lat: number
+  lng: number
+  type: string
+  category: string
+  address?: string
+  distance?: number
+}
+
+interface GeminiItinerary {
+  overview: string
+  highlights: string[]
+  stops: {
+    stopName: string
+    day1: { time: string; activity: string; tip?: string }[]
+    day2: { time: string; activity: string; tip?: string }[]
+    localTips: string[]
+  }[]
+  packingList: string[]
+  bestTimeToGo: string
+}
+
+// ─── Category config ──────────────────────────────────────────────────────────
+
+const POI_ICONS: Record<string, string> = {
+  food: '🍜', art: '🎨', history: '🏛', nature: '🌿', event: '🎉',
+  shopping: '🛍', museum: '🖼', nightlife: '🌙', culture: '🎭',
+  photography: '📷', default: '📍',
+}
+
+const FSQ_CATEGORIES: Record<string, string> = {
+  food:         '13065,13032,13003,13062',
+  art:          '10004,10000',
+  history:      '16011,10027',
+  culture:      '10000,10028',
+  events:       '10012',
+  nature:       '16032,16019',
+  architecture: '10040,16011',
+  museums:      '10027',
+  shopping:     '17114,17000',
+  nightlife:    '13003,13029',
+  traditions:   '10027,10000',
+  photography:  '16032,16000',
+}
+
+const FSQ_TYPE_MAP: Record<string, string> = {
+  '13': 'food', '10004': 'art', '10027': 'museum', '16011': 'history',
+  '10000': 'culture', '16032': 'nature', '16019': 'nature', '17': 'shopping',
+  '13029': 'nightlife', '10012': 'event', '10040': 'history',
 }
 
 const BOOKING_LINKS: Record<string, { label: string; url: string }> = {
@@ -38,201 +80,260 @@ const BOOKING_LINKS: Record<string, { label: string; url: string }> = {
   Amtrak:     { label: 'View All Routes on Amtrak.com', url: 'https://www.amtrak.com' },
 }
 
-// Maps interest keywords from the prompt to OSM tags for Overpass API
-const INTEREST_OSM: Record<string, string[]> = {
-  food:         ['amenity=restaurant', 'amenity=cafe', 'amenity=bar', 'amenity=food_court', 'amenity=fast_food'],
-  art:          ['amenity=arts_centre', 'tourism=gallery', 'amenity=studio'],
-  history:      ['tourism=museum', 'historic=monument', 'historic=memorial', 'historic=building', 'historic=ruins'],
-  culture:      ['amenity=theatre', 'amenity=cinema', 'tourism=attraction', 'amenity=community_centre'],
-  events:       ['amenity=theatre', 'amenity=events_venue', 'amenity=concert_hall', 'amenity=convention_centre'],
-  nature:       ['leisure=park', 'leisure=garden', 'leisure=nature_reserve', 'leisure=dog_park'],
-  architecture: ['tourism=attraction', 'historic=building', 'amenity=place_of_worship', 'tourism=artwork'],
-  museums:      ['tourism=museum', 'amenity=museum'],
-  shopping:     ['shop=mall', 'shop=department_store', 'amenity=marketplace', 'shop=market'],
-  nightlife:    ['amenity=bar', 'amenity=pub', 'amenity=nightclub'],
-  traditions:   ['tourism=attraction', 'historic=monument', 'tourism=museum'],
-  photography:  ['tourism=viewpoint', 'tourism=attraction', 'natural=peak'],
-}
+const ALL_CATEGORIES = Object.keys(POI_ICONS).filter(k => k !== 'default')
 
-const OSM_TO_TYPE: Record<string, string> = {
-  restaurant: 'food', cafe: 'food', bar: 'food', fast_food: 'food', food_court: 'food',
-  arts_centre: 'art', gallery: 'art', studio: 'art',
-  museum: 'museum',
-  monument: 'history', memorial: 'history', ruins: 'history',
-  theatre: 'culture', cinema: 'culture', community_centre: 'culture', concert_hall: 'event', events_venue: 'event', convention_centre: 'event',
-  park: 'nature', garden: 'nature', nature_reserve: 'nature', dog_park: 'nature',
-  place_of_worship: 'architecture', artwork: 'architecture',
-  mall: 'shopping', department_store: 'shopping', marketplace: 'shopping', market: 'shopping',
-  pub: 'nightlife', nightclub: 'nightlife',
-  viewpoint: 'photography',
-  attraction: 'culture',
-}
-
-export interface FetchedPOI {
-  id: number
-  name: string
-  lat: number
-  lng: number
-  type: string
-  address?: string
-  tags: Record<string, string>
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseInterests(prompt: string): string[] {
   const lower = prompt.toLowerCase()
-  return Object.keys(INTEREST_OSM).filter(key =>
-    lower.includes(key) || lower.includes('#' + key)
-  )
+  return Object.keys(FSQ_CATEGORIES).filter(k => lower.includes(k) || lower.includes('#' + k))
 }
 
-function buildOverpassQuery(lat: number, lng: number, interests: string[]): string {
-  const radius = 1500 // meters
-  const tags = interests.length > 0
-    ? [...new Set(interests.flatMap(i => INTEREST_OSM[i] ?? []))]
-    : [...new Set(Object.values(INTEREST_OSM).flat())]
-
-  const nodeQueries = tags.map(tag => {
-    const [k, v] = tag.split('=')
-    return `node["${k}"="${v}"](around:${radius},${lat},${lng});`
-  }).join('\n  ')
-
-  return `[out:json][timeout:15];
-(
-  ${nodeQueries}
-);
-out body 40;`
+function googleMapsUrl(q: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
 }
 
-async function fetchPOIs(lat: number, lng: number, interests: string[]): Promise<FetchedPOI[]> {
-  const query = buildOverpassQuery(lat, lng, interests)
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: query,
-    headers: { 'Content-Type': 'text/plain' },
-  })
-  if (!res.ok) throw new Error('Overpass API error')
-  const data = await res.json()
+// ─── API fetchers ─────────────────────────────────────────────────────────────
 
-  return (data.elements as Record<string, unknown>[])
-    .filter((el: Record<string, unknown>) => (el.tags as Record<string, string>)?.name)
-    .map((el: Record<string, unknown>) => {
-      const tags = el.tags as Record<string, string>
-      const amenity = tags.amenity || tags.shop || tags.leisure || tags.tourism || tags.historic || tags.natural || ''
-      return {
-        id: el.id as number,
-        name: tags.name,
-        lat: el.lat as number,
-        lng: el.lon as number,
-        type: OSM_TO_TYPE[amenity] ?? 'default',
-        address: [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ') || undefined,
-        tags,
-      }
+async function fetchWeather(lat: number, lng: number): Promise<Weather | null> {
+  try {
+    const r = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${OW_KEY}&units=imperial`
+    )
+    if (!r.ok) return null
+    const d = await r.json()
+    return {
+      temp:     Math.round(d.main.temp),
+      feels:    Math.round(d.main.feels_like),
+      desc:     d.weather[0].description,
+      icon:     `https://openweathermap.org/img/wn/${d.weather[0].icon}@2x.png`,
+      humidity: d.main.humidity,
+      wind:     Math.round(d.wind.speed),
+    }
+  } catch { return null }
+}
+
+async function fetchFoursquarePOIs(lat: number, lng: number, interests: string[]): Promise<FoursquarePOI[]> {
+  try {
+    const cats = interests.length > 0
+      ? [...new Set(interests.flatMap(i => (FSQ_CATEGORIES[i] ?? '').split(',')))].filter(Boolean).join(',')
+      : Object.values(FSQ_CATEGORIES).flatMap(v => v.split(',')).filter(Boolean).slice(0, 20).join(',')
+
+    const url = `https://api.foursquare.com/v3/places/search?ll=${lat},${lng}&radius=1500&limit=30&categories=${cats}`
+    const r = await fetch(url, {
+      headers: { Authorization: FSQ_KEY, Accept: 'application/json' },
     })
-    .slice(0, 30)
+    if (!r.ok) return []
+    const d = await r.json()
+    return (d.results ?? []).map((p: Record<string, unknown>) => {
+      const cats = (p.categories as { id: number }[] | undefined) ?? []
+      const firstCat = String(cats[0]?.id ?? '')
+      const type = FSQ_TYPE_MAP[firstCat] ?? FSQ_TYPE_MAP[firstCat.slice(0, 2)] ?? 'default'
+      const geo = p.geocodes as { main?: { latitude: number; longitude: number } } | undefined
+      const loc = p.location as { formatted_address?: string } | undefined
+      return {
+        id:       String(p.fsq_id),
+        name:     String(p.name),
+        lat:      geo?.main?.latitude ?? lat,
+        lng:      geo?.main?.longitude ?? lng,
+        type,
+        category: (cats[0] as unknown as { name: string })?.name ?? '',
+        address:  loc?.formatted_address,
+        distance: p.distance as number | undefined,
+      } as FoursquarePOI
+    })
+  } catch { return [] }
 }
 
-// Re-center map when active stop changes
+async function fetchGeminiItinerary(
+  stops: TripStop[],
+  prompt: string,
+  weatherMap: Record<string, Weather | null>,
+  poisMap: Record<string, FoursquarePOI[]>,
+  model: GeminiModel,
+): Promise<GeminiItinerary | null> {
+  try {
+    const stopsText = stops.map(s => {
+      const w = weatherMap[s.id]
+      const pois = (poisMap[s.id] ?? []).slice(0, 10).map(p => `- ${p.name} (${p.category})`).join('\n')
+      return `
+Stop: ${s.displayName} (${s.system})
+Lines: ${s.lines.slice(0, 3).join(', ')}
+Weather: ${w ? `${w.temp}°F, ${w.desc}, ${w.humidity}% humidity` : 'unavailable'}
+Nearby places:
+${pois || '(no data)'}`
+    }).join('\n\n')
+
+    const systemPrompt = `You are an expert train travel planner for the US Northeast.
+Generate a detailed, personalized weekend trip itinerary based on the user's request.
+Respond ONLY with valid JSON — no markdown, no explanation, just the JSON object.`
+
+    const userPrompt = `Create a weekend trip itinerary for these train stops:
+
+${stopsText}
+
+User's request: "${prompt || 'A fun weekend trip'}"
+
+Respond with this exact JSON structure:
+{
+  "overview": "2-3 sentence trip overview",
+  "highlights": ["highlight 1", "highlight 2", "highlight 3"],
+  "stops": [
+    {
+      "stopName": "exact stop name",
+      "day1": [{"time": "9:00 AM", "activity": "specific activity", "tip": "optional local tip"}],
+      "day2": [{"time": "9:00 AM", "activity": "specific activity", "tip": "optional local tip"}],
+      "localTips": ["tip 1", "tip 2"]
+    }
+  ],
+  "packingList": ["item 1", "item 2"],
+  "bestTimeToGo": "season/timing recommendation"
+}`
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEM_KEY}`
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+      }),
+    })
+    if (!r.ok) return null
+    const d = await r.json()
+    const raw = d.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!raw) return null
+    return JSON.parse(raw) as GeminiItinerary
+  } catch { return null }
+}
+
+// ─── Map helpers ──────────────────────────────────────────────────────────────
+
 function MapRecenter({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap()
   useEffect(() => { map.flyTo([lat, lng], 14, { duration: 1 }) }, [lat, lng, map])
   return null
 }
 
+// ─── Props ────────────────────────────────────────────────────────────────────
+
 interface Props {
   selectedStops: TripStop[]
   prompt: string
+  model: GeminiModel
   onBack: () => void
 }
 
-const ALL_CATEGORIES = Object.keys(POI_ICONS).filter(k => k !== 'default')
+// ─── Main component ───────────────────────────────────────────────────────────
 
-export default function TripResult({ selectedStops, prompt, onBack }: Props) {
+export default function TripResult({ selectedStops, prompt, model, onBack }: Props) {
   const [activeStop, setActiveStop] = useState<TripStop>(selectedStops[0])
-  const [poisByStop, setPoisByStop] = useState<Record<string, FetchedPOI[]>>({})
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
+  const [weatherMap, setWeatherMap]   = useState<Record<string, Weather | null>>({})
+  const [poisMap, setPoisMap]         = useState<Record<string, FoursquarePOI[]>>({})
+  const [itinerary, setItinerary]     = useState<GeminiItinerary | null>(null)
+  const [itinLoading, setItinLoading] = useState(true)
+  const [itinError, setItinError]     = useState(false)
+  const [poisLoading, setPoisLoading] = useState(false)
   const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set(ALL_CATEGORIES))
 
   const interests = parseInterests(prompt)
-  const activePois = poisByStop[activeStop.id] ?? []
-
-  const toggleCategory = (cat: string) => {
-    setActiveCategories(prev => {
-      const next = new Set(prev)
-      next.has(cat) ? next.delete(cat) : next.add(cat)
-      return next
-    })
-  }
-  const allOn = activeCategories.size === ALL_CATEGORIES.length
-  const toggleAll = () => setActiveCategories(allOn ? new Set() : new Set(ALL_CATEGORIES))
-
-  useEffect(() => {
-    if (poisByStop[activeStop.id] !== undefined) return
-    setLoading(true)
-    setError(false)
-    fetchPOIs(activeStop.lat, activeStop.lng, interests)
-      .then(pois => setPoisByStop(prev => ({ ...prev, [activeStop.id]: pois })))
-      .catch(() => { setError(true); setPoisByStop(prev => ({ ...prev, [activeStop.id]: [] })) })
-      .finally(() => setLoading(false))
-  }, [activeStop.id])
-
-  const isAmtrak = activeStop.system === 'Amtrak'
-  const booking  = BOOKING_LINKS[activeStop.system]
-
-  const googleMapsUrl = (query: string) =>
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
-
-  const systemIcon = activeStop.system === 'LIRR' ? '🚋'
-    : activeStop.system === 'MetroNorth' ? '🚉'
-    : activeStop.system === 'PATH' ? '🚇'
-    : '🚂'
-
+  const booking   = BOOKING_LINKS[activeStop.system]
+  const systemIcon = { LIRR: '🚋', MetroNorth: '🚉', PATH: '🚇', Amtrak: '🚂' }[activeStop.system] ?? '🚂'
   const systemLabel = activeStop.system === 'MetroNorth' ? 'Metro-North' : activeStop.system
 
-  // Merge hardcoded city POIs (Amtrak) with fetched OSM POIs
-  const hardcodedPois = activeStop.pois ?? []
-  const allPois: Array<{ name: string; lat: number; lng: number; type: string; description?: string; address?: string; isOSM?: boolean }> = [
-    ...hardcodedPois.map(p => ({ ...p, isOSM: false })),
-    ...activePois
-      .filter(op => !hardcodedPois.some(hp => hp.name.toLowerCase() === op.name.toLowerCase()))
-      .map(op => ({ name: op.name, lat: op.lat, lng: op.lng, type: op.type, address: op.address, isOSM: true })),
-  ]
-  const visiblePois = allPois.filter(p => activeCategories.has(p.type) || (p.type === 'default' && activeCategories.has('default')))
+  const activePois = poisMap[activeStop.id] ?? []
+  const visiblePois = activePois.filter(p => activeCategories.has(p.type) || p.type === 'default')
+
+  const allOn = activeCategories.size === ALL_CATEGORIES.length
+  const toggleAll = () => setActiveCategories(allOn ? new Set() : new Set(ALL_CATEGORIES))
+  const toggleCat = (c: string) => setActiveCategories(prev => {
+    const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n
+  })
+
+  // Fetch weather for all stops on mount
+  useEffect(() => {
+    selectedStops.forEach(stop => {
+      fetchWeather(stop.lat, stop.lng).then(w =>
+        setWeatherMap(prev => ({ ...prev, [stop.id]: w }))
+      )
+    })
+  }, [])
+
+  // Fetch Foursquare POIs when active stop changes
+  useEffect(() => {
+    if (poisMap[activeStop.id] !== undefined) return
+    setPoisLoading(true)
+    fetchFoursquarePOIs(activeStop.lat, activeStop.lng, interests)
+      .then(pois => setPoisMap(prev => ({ ...prev, [activeStop.id]: pois })))
+      .finally(() => setPoisLoading(false))
+  }, [activeStop.id])
+
+  // Call Gemini once all weather + first stop's POIs are ready (or after 4s timeout)
+  useEffect(() => {
+    setItinLoading(true)
+    setItinError(false)
+
+    // Fetch all stops' POIs first then call Gemini
+    const fetchAll = async () => {
+      const allPois: Record<string, FoursquarePOI[]> = {}
+      const allWeather: Record<string, Weather | null> = {}
+      await Promise.all(selectedStops.map(async s => {
+        allPois[s.id]    = await fetchFoursquarePOIs(s.lat, s.lng, interests)
+        allWeather[s.id] = await fetchWeather(s.lat, s.lng)
+      }))
+      setPoisMap(allPois)
+      setWeatherMap(allWeather)
+
+      const result = await fetchGeminiItinerary(selectedStops, prompt, allWeather, allPois, model)
+      if (result) { setItinerary(result); setItinError(false) }
+      else setItinError(true)
+      setItinLoading(false)
+    }
+    fetchAll()
+  }, [])
+
+  const weather = weatherMap[activeStop.id]
+  const stopItinerary = itinerary?.stops.find(s =>
+    s.stopName.toLowerCase().includes(activeStop.name.toLowerCase()) ||
+    activeStop.name.toLowerCase().includes(s.stopName.toLowerCase())
+  ) ?? itinerary?.stops[selectedStops.findIndex(s => s.id === activeStop.id)] ?? null
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
 
-      {/* Left info panel */}
-      <div className="w-full lg:w-[26rem] flex-shrink-0 overflow-y-auto bg-white dark:bg-gray-800 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      {/* ── Left info panel ── */}
+      <div className="w-full lg:w-[28rem] flex-shrink-0 overflow-y-auto bg-white dark:bg-gray-800 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col">
 
+        {/* Header */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
           <button onClick={onBack} className="text-blue-500 hover:text-blue-600 text-sm flex items-center gap-1 mb-3">
             ← Back to map
           </button>
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-1">Your Trip Plan</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Your Trip Plan</h2>
+            <span className="text-xs px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-semibold">
+              🤖 {model === 'gemini-2.5-pro' ? 'Gemini Pro' : 'Gemini Flash'}
+            </span>
+          </div>
           {prompt && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 italic line-clamp-2">"{prompt}"</p>
           )}
           {interests.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
               {interests.map(i => (
-                <span key={i} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full text-[10px] font-semibold">
-                  #{i}
-                </span>
+                <span key={i} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full text-[10px] font-semibold">#{i}</span>
               ))}
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">
             {selectedStops.map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => setActiveStop(s)}
+              <button key={s.id} onClick={() => setActiveStop(s)}
                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
                   activeStop.id === s.id
                     ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300'
-                }`}
-              >
+                }`}>
                 {i > 0 && <span className="opacity-60 mr-1">→</span>}{s.name}
               </button>
             ))}
@@ -240,221 +341,191 @@ export default function TripResult({ selectedStops, prompt, onBack }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <img
-            src={activeStop.photo}
-            alt={activeStop.name}
-            className="w-full h-36 object-cover rounded-xl"
-          />
 
+          {/* Stop photo + info */}
+          <img src={activeStop.photo} alt={activeStop.name} className="w-full h-36 object-cover rounded-xl" />
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xl">{systemIcon}</span>
               <h3 className="text-xl font-bold text-gray-800 dark:text-white">{activeStop.displayName}</h3>
             </div>
-            {activeStop.tagline && (
-              <p className="text-blue-500 text-sm font-medium italic">{activeStop.tagline}</p>
+            {activeStop.tagline && <p className="text-blue-500 text-sm font-medium italic">{activeStop.tagline}</p>}
+          </div>
+
+          {/* Weather card */}
+          {weather ? (
+            <div className="flex items-center gap-3 bg-sky-50 dark:bg-sky-900/20 rounded-xl p-3 border border-sky-100 dark:border-sky-800">
+              <img src={weather.icon} alt={weather.desc} className="w-12 h-12" />
+              <div>
+                <p className="font-bold text-gray-800 dark:text-white text-lg">{weather.temp}°F
+                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">feels {weather.feels}°F</span>
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 capitalize">{weather.desc}</p>
+                <p className="text-xs text-gray-400">💧 {weather.humidity}% · 💨 {weather.wind} mph</p>
+              </div>
+            </div>
+          ) : (
+            <div className="h-16 bg-sky-50 dark:bg-sky-900/20 rounded-xl border border-sky-100 dark:border-sky-800 flex items-center justify-center">
+              <span className="text-xs text-sky-400 animate-pulse">Loading weather…</span>
+            </div>
+          )}
+
+          {/* AI Itinerary */}
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800">
+            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2 flex items-center gap-2">
+              ✨ AI Itinerary
+              {itinLoading && <span className="text-xs text-purple-400 font-normal animate-pulse">Generating with {model === 'gemini-2.5-pro' ? 'Gemini Pro' : 'Gemini Flash'}…</span>}
+            </h4>
+
+            {itinError && (
+              <p className="text-xs text-red-400">Couldn't generate itinerary — check your Gemini API key in .env</p>
             )}
-            {!isAmtrak && (
-              <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold"
-                style={{ background: activeStop.dotColor + '22', color: activeStop.dotColor, border: `1px solid ${activeStop.dotColor}44` }}>
-                {systemLabel}
-              </span>
+
+            {itinerary && !itinLoading && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{itinerary.overview}</p>
+                {itinerary.highlights.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {itinerary.highlights.map((h, i) => (
+                      <span key={i} className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-800/50 text-purple-700 dark:text-purple-300 rounded-full">{h}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {stopItinerary && !itinLoading && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1.5">Day 1</p>
+                  <div className="space-y-1.5">
+                    {stopItinerary.day1.map((item, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5">{item.time}</span>
+                        <div>
+                          <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{item.activity}</p>
+                          {item.tip && <p className="text-xs text-gray-400 italic">{item.tip}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1.5">Day 2</p>
+                  <div className="space-y-1.5">
+                    {stopItinerary.day2.map((item, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5">{item.time}</span>
+                        <div>
+                          <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{item.activity}</p>
+                          {item.tip && <p className="text-xs text-gray-400 italic">{item.tip}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {stopItinerary.localTips.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1">Local Tips</p>
+                    {stopItinerary.localTips.map((t, i) => (
+                      <p key={i} className="text-xs text-gray-500 dark:text-gray-400">• {t}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {itinerary && (
+              <div className="mt-3 pt-3 border-t border-purple-100 dark:border-purple-800">
+                <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1">Best time to go</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{itinerary.bestTimeToGo}</p>
+                {itinerary.packingList.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1">Pack</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{itinerary.packingList.join(' · ')}</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
-          {activeStop.description && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{activeStop.description}</p>
-          )}
-
-          {activeStop.history && (
-            <div>
-              <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-1.5">History & Culture</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{activeStop.history}</p>
-            </div>
-          )}
-
-          {activeStop.highlights && activeStop.highlights.length > 0 && (
-            <div>
-              <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2">Why People Visit</h4>
-              <ul className="space-y-1.5">
-                {activeStop.highlights.map((h, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <span className="text-blue-400 mt-0.5 flex-shrink-0">✦</span>
-                    <span>{h}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {/* Train info */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
-            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2 flex items-center gap-2">
-              {systemIcon} Getting There by {systemLabel}
-            </h4>
+            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2">{systemIcon} Getting There by {systemLabel}</h4>
             <div className="flex flex-wrap gap-1 mb-3">
               {activeStop.lines.slice(0, 4).map(line => (
-                <span key={line} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
-                  {line}
-                </span>
+                <span key={line} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">{line}</span>
               ))}
             </div>
-            {isAmtrak ? (
-              <>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Prices vary by date and class. Book early for best fares — Amtrak offers discounts for advance purchase.
-                </p>
-                {selectedStops.length > 1 && activeStop.id !== selectedStops[0].id && (
-                  <a href="https://www.amtrak.com/tickets/departure.html" target="_blank" rel="noopener noreferrer"
-                    className="block w-full text-center btn-primary text-sm py-2 mb-2">
-                    🎫 Book Amtrak: {selectedStops[0].name} → {activeStop.name}
-                  </a>
-                )}
-              </>
-            ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                {activeStop.system === 'PATH'
-                  ? 'PATH runs 24/7. Use OMNY contactless — tap your card or phone, no paper tickets.'
-                  : 'Buy tickets at station machines or via the MTA app. Off-peak fares available weekends.'}
-              </p>
-            )}
             <a href={booking.url} target="_blank" rel="noopener noreferrer"
               className="block w-full text-center bg-white dark:bg-gray-700 text-blue-500 border border-blue-300 dark:border-blue-600 rounded-lg py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors font-semibold">
               {booking.label}
             </a>
           </div>
 
-          {/* Travel notes */}
-          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-100 dark:border-amber-800">
-            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2">⚠️ Travel Notes</h4>
-            <ul className="space-y-1">
-              {isAmtrak ? (
-                <>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Book Amtrak tickets at least 2 weeks ahead for best prices</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Trains can run late — allow buffer time between activities</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Amtrak allows 2 carry-on bags + 2 personal items (free)</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Many cities have transit apps for local subway/bus connections</li>
-                </>
-              ) : activeStop.system === 'PATH' ? (
-                <>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• PATH runs 24/7 including weekends and holidays</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Use OMNY contactless — no MetroCard needed</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Off-peak fares same as peak on PATH</li>
-                </>
-              ) : (
-                <>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Weekend schedules differ from weekday — check MTA.info</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Off-peak fares available Sat, Sun & weekday off-hours</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Buy round-trip for a discount vs. two one-ways</li>
-                  <li className="text-xs text-gray-600 dark:text-gray-400">• Bikes allowed on trains with a bicycle permit</li>
-                </>
-              )}
-            </ul>
-          </div>
-
-          {/* Places to visit */}
+          {/* Foursquare places */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-bold text-gray-800 dark:text-white text-sm">
-                📍 Places Near {activeStop.name}
-                {interests.length > 0 && <span className="font-normal text-gray-400 ml-1">(filtered by your interests)</span>}
+                📍 Nearby Places
+                <span className="ml-1 font-normal text-gray-400 text-xs">via Foursquare</span>
               </h4>
-              {loading && (
-                <span className="text-xs text-blue-400 animate-pulse">Loading…</span>
-              )}
+              {poisLoading && <span className="text-xs text-blue-400 animate-pulse">Loading…</span>}
             </div>
-
-            {error && (
-              <p className="text-xs text-red-400 mb-2">Couldn't load local places — check your connection.</p>
-            )}
-
-            {!loading && allPois.length === 0 && !error && (
-              <p className="text-xs text-gray-400 italic">No matching places found nearby.</p>
-            )}
-
             <div className="space-y-2">
-              {allPois.map((poi, i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-3 p-3 rounded-xl border ${TYPE_COLORS[poi.type] ?? TYPE_COLORS.default}`}
-                >
+              {visiblePois.slice(0, 20).map((poi, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
                   <span className="text-xl flex-shrink-0">{POI_ICONS[poi.type] ?? POI_ICONS.default}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm">{poi.name}</p>
-                    {poi.description && <p className="text-xs mt-0.5 opacity-80 leading-snug">{poi.description}</p>}
-                    {poi.address && <p className="text-xs mt-0.5 opacity-60">{poi.address}</p>}
-                    {poi.isOSM && (
-                      <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 text-gray-500 dark:text-gray-400 font-medium">
-                        OpenStreetMap
-                      </span>
-                    )}
+                    <p className="font-semibold text-sm text-gray-800 dark:text-white">{poi.name}</p>
+                    {poi.category && <p className="text-xs text-gray-400">{poi.category}</p>}
+                    {poi.address && <p className="text-xs text-gray-400 mt-0.5">{poi.address}</p>}
+                    {poi.distance && <p className="text-xs text-gray-300">{poi.distance}m away</p>}
                   </div>
-                  <a
-                    href={googleMapsUrl(poi.name + ' near ' + activeStop.displayName)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-shrink-0 text-xs px-2 py-1 bg-white/70 dark:bg-black/20 rounded-lg hover:bg-white dark:hover:bg-black/40 transition-colors font-medium whitespace-nowrap"
-                  >
+                  <a href={googleMapsUrl(poi.name + ' near ' + activeStop.displayName)}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-shrink-0 text-xs px-2 py-1 bg-white dark:bg-gray-600 rounded-lg border border-gray-200 dark:border-gray-500 hover:bg-gray-50 transition-colors font-medium whitespace-nowrap">
                     📌 Save
                   </a>
                 </div>
               ))}
+              {!poisLoading && activePois.length === 0 && (
+                <p className="text-xs text-gray-400 italic">No places found — check your Foursquare API key in .env</p>
+              )}
             </div>
-
-            {allPois.length === 0 && !loading && (
-              <div className="mt-3 text-center">
-                <a
-                  href={googleMapsUrl('things to do near ' + activeStop.name + ' train station')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors"
-                >
-                  🗺 Explore on Google Maps
-                </a>
-              </div>
-            )}
           </div>
 
           <div className="pb-4" />
         </div>
       </div>
 
-      {/* Right: legend sidebar + map */}
+      {/* ── Right: legend + map ── */}
       <div className="flex-1 flex min-h-[400px] lg:min-h-0">
 
-        {/* Legend filter panel */}
+        {/* Filter sidebar */}
         <div className="w-44 flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-y-auto z-[500]">
           <div className="p-3 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
-            <p className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-2 uppercase tracking-wide">
-              Filter Map
-              {loading && <span className="ml-1 text-blue-400 font-normal normal-case animate-pulse">loading…</span>}
-            </p>
-            <button
-              onClick={toggleAll}
+            <p className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-2 uppercase tracking-wide">Filter Map</p>
+            <button onClick={toggleAll}
               className={`w-full text-xs font-semibold py-1.5 rounded-lg border transition-all ${
                 allOn
                   ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300'
-              }`}
-            >
+              }`}>
               {allOn ? '✓ All On' : 'All Off'}
             </button>
           </div>
-
           <div className="flex-1 p-2 space-y-1">
             {ALL_CATEGORIES.map(cat => {
               const on = activeCategories.has(cat)
-              const count = allPois.filter(p => p.type === cat).length
+              const count = activePois.filter(p => p.type === cat).length
               return (
-                <button
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
+                <button key={cat} onClick={() => toggleCat(cat)}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all border ${
                     on
                       ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300'
                       : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-                  }`}
-                >
+                  }`}>
                   <span className={on ? '' : 'grayscale opacity-40'}>{POI_ICONS[cat]}</span>
                   <span className="flex-1 text-left capitalize font-medium">{cat}</span>
                   {count > 0 && (
@@ -465,11 +536,9 @@ export default function TripResult({ selectedStops, prompt, onBack }: Props) {
                 </button>
               )
             })}
-
             <div className="border-t border-gray-200 dark:border-gray-600 mt-2 pt-2">
               <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400">
-                <span>{systemIcon}</span>
-                <span>Station</span>
+                <span>{systemIcon}</span><span>Station</span>
               </div>
             </div>
           </div>
@@ -477,67 +546,43 @@ export default function TripResult({ selectedStops, prompt, onBack }: Props) {
 
         {/* Map */}
         <div className="flex-1 relative">
-          <MapContainer
-            center={[activeStop.lat, activeStop.lng]}
-            zoom={14}
-            style={{ height: '100%', width: '100%' }}
-          >
+          <MapContainer center={[activeStop.lat, activeStop.lng]} zoom={14} style={{ height: '100%', width: '100%' }}>
             <TileLayer
-              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
               url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               subdomains="abcd"
             />
             <MapRecenter lat={activeStop.lat} lng={activeStop.lng} />
 
             {/* Station marker */}
-            <Marker
-              position={[activeStop.lat, activeStop.lng]}
+            <Marker position={[activeStop.lat, activeStop.lng]}
               icon={L.divIcon({
                 className: '',
-                html: `<div style="font-size:26px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">${systemIcon}</div>`,
-                iconSize: [30, 30],
-                iconAnchor: [15, 15],
-              })}
-            >
+                html: `<div style="font-size:28px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">${systemIcon}</div>`,
+                iconSize: [32, 32], iconAnchor: [16, 16],
+              })}>
               <Popup>
                 <b>{activeStop.displayName}</b><br />
-                <a href={booking.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-xs">
-                  {systemLabel} info →
-                </a>
+                {weather && <span>{weather.temp}°F, {weather.desc}</span>}
               </Popup>
             </Marker>
 
-            {/* POI markers — filtered by active categories */}
+            {/* POI markers */}
             {visiblePois.map((poi, i) => (
-              <Marker
-                key={i}
-                position={[poi.lat, poi.lng]}
+              <Marker key={i} position={[poi.lat, poi.lng]}
                 icon={L.divIcon({
                   className: '',
-                  html: `<div style="
-                    background:white;
-                    border-radius:50%;
-                    width:28px;height:28px;
-                    display:flex;align-items:center;justify-content:center;
-                    font-size:14px;
-                    box-shadow:0 2px 8px rgba(0,0,0,0.3);
-                    cursor:pointer;
-                  ">${POI_ICONS[poi.type] ?? POI_ICONS.default}</div>`,
-                  iconSize: [28, 28],
-                  iconAnchor: [14, 14],
-                })}
-              >
+                  html: `<div style="background:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);cursor:pointer;">${POI_ICONS[poi.type] ?? POI_ICONS.default}</div>`,
+                  iconSize: [28, 28], iconAnchor: [14, 14],
+                })}>
                 <Popup>
-                  <div style={{ minWidth: 190 }}>
+                  <div style={{ minWidth: 180 }}>
                     <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13 }}>{poi.name}</p>
-                    {poi.description && <p style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{poi.description}</p>}
+                    {poi.category && <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>{poi.category}</p>}
                     {poi.address && <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>{poi.address}</p>}
-                    <a
-                      href={googleMapsUrl(poi.name + ' near ' + activeStop.displayName)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600 }}
-                    >
+                    <a href={googleMapsUrl(poi.name + ' near ' + activeStop.displayName)}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>
                       📌 Save to Google Maps →
                     </a>
                   </div>

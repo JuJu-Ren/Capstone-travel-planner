@@ -23,15 +23,23 @@ const SYSTEM_ICONS: Record<string, string> = {
   PATH: '🚇',
 }
 
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro'
+
+const MODELS: { id: GeminiModel; label: string; badge: string }[] = [
+  { id: 'gemini-2.5-flash', label: 'Flash', badge: '⚡ Fast' },
+  { id: 'gemini-2.5-pro',   label: 'Pro',   badge: '✨ Detailed' },
+]
+
 interface Props {
   selectedStops: TripStop[]
-  onGenerate: (prompt: string) => void
+  onGenerate: (prompt: string, model: GeminiModel) => void
   onClearStop: (id: string) => void
 }
 
 export default function PromptSection({ selectedStops, onGenerate, onClearStop }: Props) {
   const [prompt, setPrompt] = useState('')
   const [showTip, setShowTip] = useState(false)
+  const [model, setModel] = useState<GeminiModel>('gemini-2.5-flash')
 
   const addTag = (tag: string) => {
     setPrompt(prev => prev ? `${prev} ${tag}` : tag)
@@ -113,7 +121,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
         </div>
 
         {/* Hashtag chips */}
-        <div className="flex flex-wrap gap-2 mb-5">
+        <div className="flex flex-wrap gap-2 mb-4">
           {INTERESTS.map(({ tag, label }) => {
             const active = prompt.includes(tag)
             return (
@@ -135,9 +143,28 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
           })}
         </div>
 
-        <div className="flex items-center gap-4">
+        {/* Model selector + generate button */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* AI model picker */}
+          <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 rounded-xl p-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold pl-2">🤖 AI:</span>
+            {MODELS.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setModel(m.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  model === m.id
+                    ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {m.badge} {m.label}
+              </button>
+            ))}
+          </div>
+
           <button
-            onClick={() => onGenerate(prompt)}
+            onClick={() => onGenerate(prompt, model)}
             disabled={selectedStops.length === 0}
             className="btn-primary px-8 py-3 text-base disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
           >
