@@ -23,11 +23,13 @@ const SYSTEM_ICONS: Record<string, string> = {
   PATH: '🚇',
 }
 
-export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro'
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gemini-2.0-flash-lite'
 
 const MODELS: { id: GeminiModel; label: string; badge: string }[] = [
-  { id: 'gemini-2.5-flash', label: 'Flash', badge: '⚡ Fast' },
-  { id: 'gemini-2.5-pro',   label: 'Pro',   badge: '✨ Detailed' },
+  { id: 'gemini-2.5-flash',      label: '2.5 Flash',      badge: '⚡' },
+  { id: 'gemini-2.5-pro',        label: '2.5 Pro',        badge: '✨' },
+  { id: 'gemini-2.0-flash',      label: '2.0 Flash',      badge: '🔵' },
+  { id: 'gemini-2.0-flash-lite', label: '2.0 Flash Lite', badge: '🪶' },
 ]
 
 interface Props {
