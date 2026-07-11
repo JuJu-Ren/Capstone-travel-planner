@@ -12,8 +12,10 @@ type Page = 'map' | 'loading' | 'result'
 export default function App() {
   const [page, setPage] = useState<Page>('map')
   const [selectedStops, setSelectedStops] = useState<TripStop[]>([])
-  const [prompt, setPrompt] = useState('')
-  const [model, setModel] = useState<GeminiModel>('gemini-2.5-flash')
+  const [prompt, setPrompt]       = useState('')
+  const [model, setModel]         = useState<GeminiModel>('gemini-2.5-flash')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate]     = useState('')
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationRequested, setLocationRequested] = useState(false)
 
@@ -41,10 +43,9 @@ export default function App() {
     setSelectedStops(prev => prev.filter(s => s.id !== id))
   }
 
-  const handleGenerate = (p: string, m: GeminiModel) => {
+  const handleGenerate = (p: string, m: GeminiModel, sd: string, ed: string) => {
     if (selectedStops.length === 0) return
-    setPrompt(p)
-    setModel(m)
+    setPrompt(p); setModel(m); setStartDate(sd); setEndDate(ed)
     setPage('loading')
     setTimeout(() => setPage('result'), 1800)
   }
@@ -107,6 +108,8 @@ export default function App() {
             selectedStops={selectedStops}
             prompt={prompt}
             model={model}
+            startDate={startDate}
+            endDate={endDate}
             onBack={() => setPage('map')}
           />
         )}

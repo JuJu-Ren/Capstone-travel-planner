@@ -2,25 +2,19 @@ import { useState } from 'react'
 import type { TripStop } from '../data/types'
 
 const INTERESTS = [
-  { tag: '#food', label: '🍜 Food' },
-  { tag: '#art', label: '🎨 Art' },
-  { tag: '#history', label: '🏛 History' },
-  { tag: '#culture', label: '🎭 Culture' },
-  { tag: '#events', label: '🎉 Events' },
-  { tag: '#nature', label: '🌿 Nature' },
-  { tag: '#architecture', label: '🏗 Architecture' },
-  { tag: '#museums', label: '🖼 Museums' },
-  { tag: '#shopping', label: '🛍 Shopping' },
-  { tag: '#nightlife', label: '🌙 Nightlife' },
-  { tag: '#traditions', label: '🎎 Traditions' },
-  { tag: '#photography', label: '📷 Photography' },
+  { tag: '#fine-dining',  label: '🍽 Fine Dining' },
+  { tag: '#local-food',   label: '🍜 Local Food' },
+  { tag: '#arts-culture', label: '🎨 Arts & Culture' },
+  { tag: '#shopping',     label: '🛍 Shopping' },
+  { tag: '#markets',      label: '🏪 Markets' },
+  { tag: '#events',       label: '🎭 Events' },
+  { tag: '#nightlife',    label: '🌙 Nightlife' },
+  { tag: '#scenic',       label: '🌿 Scenic' },
+  { tag: '#hidden-gems',  label: '💎 Hidden Gems' },
 ]
 
 const SYSTEM_ICONS: Record<string, string> = {
-  Amtrak: '🚂',
-  LIRR: '🚋',
-  MetroNorth: '🚉',
-  PATH: '🚇',
+  Amtrak: '🚂', LIRR: '🚋', MetroNorth: '🚉', PATH: '🚇',
 }
 
 export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gemini-2.0-flash-lite'
@@ -34,24 +28,33 @@ const MODELS: { id: GeminiModel; label: string; badge: string }[] = [
 
 interface Props {
   selectedStops: TripStop[]
-  onGenerate: (prompt: string, model: GeminiModel) => void
+  onGenerate: (prompt: string, model: GeminiModel, startDate: string, endDate: string) => void
   onClearStop: (id: string) => void
 }
 
 export default function PromptSection({ selectedStops, onGenerate, onClearStop }: Props) {
-  const [prompt, setPrompt] = useState('')
-  const [showTip, setShowTip] = useState(false)
-  const [model, setModel] = useState<GeminiModel>('gemini-2.5-flash')
+  const [prompt, setPrompt]       = useState('')
+  const [showTip, setShowTip]     = useState(false)
+  const [model, setModel]         = useState<GeminiModel>('gemini-2.5-flash')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate]     = useState('')
 
-  const addTag = (tag: string) => {
-    setPrompt(prev => prev ? `${prev} ${tag}` : tag)
+  const addTag = (tag: string) => setPrompt(prev => prev ? `${prev} ${tag}` : tag)
+
+  // Default end date to start date + 1 when start changes and end is empty
+  const handleStartDate = (v: string) => {
+    setStartDate(v)
+    if (v && !endDate) {
+      const d = new Date(v); d.setDate(d.getDate() + 1)
+      setEndDate(d.toISOString().slice(0, 10))
+    }
   }
 
   return (
     <div className="bg-white dark:bg-gray-800 border-t-2 border-blue-100 dark:border-gray-700 px-6 py-5">
       <div className="max-w-4xl mx-auto">
 
-        {/* Selected stops strip */}
+        {/* Selected stops */}
         <div className="flex flex-wrap gap-2 items-center mb-4 min-h-[32px]">
           {selectedStops.length === 0 ? (
             <p className="text-sm text-gray-400 flex items-center gap-2">
@@ -66,12 +69,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
                   {i > 0 && <span className="text-gray-300 dark:text-gray-600 text-sm">→</span>}
                   <span className="flex items-center gap-1 px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-full text-sm font-medium">
                     {SYSTEM_ICONS[stop.system] || '🚂'} {stop.displayName}
-                    <button
-                      onClick={() => onClearStop(stop.id)}
-                      className="ml-1 text-amber-400 hover:text-amber-600 dark:hover:text-amber-200 text-xs leading-none"
-                    >
-                      ✕
-                    </button>
+                    <button onClick={() => onClearStop(stop.id)} className="ml-1 text-amber-400 hover:text-amber-600 text-xs leading-none">✕</button>
                   </span>
                 </span>
               ))}
@@ -84,20 +82,44 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
           )}
         </div>
 
+        {/* Travel dates */}
+        <div className="flex gap-4 mb-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">From</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => handleStartDate(e.target.value)}
+              className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">To</label>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          {!startDate && (
+            <div className="flex items-end pb-2">
+              <p className="text-xs text-gray-400">Add dates to filter events & check weather forecasts</p>
+            </div>
+          )}
+        </div>
+
         {/* Prompt */}
         <div className="relative mb-3">
           <div className="flex items-center gap-2 mb-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Tell us what you'd like to explore
-            </label>
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Tell us what you'd like to explore</label>
             <div className="relative">
               <button
                 onMouseEnter={() => setShowTip(true)}
                 onMouseLeave={() => setShowTip(false)}
                 className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-500 text-xs flex items-center justify-center hover:bg-blue-200 transition-colors font-bold"
-              >
-                ?
-              </button>
+              >?</button>
               {showTip && (
                 <div className="absolute bottom-7 left-0 z-50 bg-gray-900 text-white text-xs rounded-xl p-4 w-64 shadow-2xl pointer-events-none">
                   <p className="font-semibold mb-2 text-blue-300">Tips for a great trip prompt</p>
@@ -106,7 +128,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
                     <li>• Travel style: relaxed, adventurous, romantic…</li>
                     <li>• Who you're with: solo, partner, family…</li>
                     <li>• Pace: packed itinerary or slow exploration?</li>
-                    <li>• Any dietary needs or accessibility needs</li>
+                    <li>• Any dietary or accessibility needs</li>
                   </ul>
                   <div className="absolute -bottom-1.5 left-3 w-3 h-3 bg-gray-900 rotate-45" />
                 </div>
@@ -116,7 +138,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
           <textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="e.g. I love exploring local food markets, street art and jazz bars. Weekend trip with my partner — we prefer walking and taking it slow..."
+            placeholder="e.g. I love fine dining and jazz bars. Weekend trip with my partner — relaxed pace, great cocktails and hidden gems..."
             rows={3}
             className="w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
           />
@@ -138,16 +160,13 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
                     ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
                     : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:text-blue-600 dark:hover:text-blue-300'
                 }`}
-              >
-                {label}
-              </button>
+              >{label}</button>
             )
           })}
         </div>
 
-        {/* Model selector + generate button */}
+        {/* Model selector + generate */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* AI model picker */}
           <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 rounded-xl p-1">
             <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold pl-2">🤖 AI:</span>
             {MODELS.map(m => (
@@ -159,14 +178,12 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop }
                     ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
-              >
-                {m.badge} {m.label}
-              </button>
+              >{m.badge} {m.label}</button>
             ))}
           </div>
 
           <button
-            onClick={() => onGenerate(prompt, model)}
+            onClick={() => onGenerate(prompt, model, startDate, endDate)}
             disabled={selectedStops.length === 0}
             className="btn-primary px-8 py-3 text-base disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
           >

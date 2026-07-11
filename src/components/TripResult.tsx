@@ -4,31 +4,51 @@ import L from 'leaflet'
 import type { TripStop } from '../data/types'
 import type { GeminiModel } from './PromptSection'
 
-// ─── API keys (set in .env) ───────────────────────────────────────────────────
-const OW_KEY  = import.meta.env.VITE_OPENWEATHER_KEY  as string
-const FSQ_KEY = import.meta.env.VITE_FOURSQUARE_KEY   as string
-const GEM_KEY = import.meta.env.VITE_GEMINI_KEY       as string
+// ─── API keys ─────────────────────────────────────────────────────────────────
+const OW_KEY     = import.meta.env.VITE_OPENWEATHER_KEY  as string
+const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY as string
+const TM_KEY     = import.meta.env.VITE_TICKETMASTER_KEY  as string
+const GEM_KEY    = import.meta.env.VITE_GEMINI_KEY        as string
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Weather {
-  temp: number
-  feels: number
-  desc: string
+interface WeatherDay {
+  date: string
+  condition: string
   icon: string
+  high: number
+  low: number
+  avg: number
+  precipitation: number
+  windSpeed: number
   humidity: number
-  wind: number
+  isForecast: boolean
 }
 
-export interface FoursquarePOI {
+interface GooglePlace {
+  id: string
+  displayName: { text: string }
+  rating?: number
+  userRatingCount?: number
+  priceLevel?: string
+  formattedAddress?: string
+  location: { latitude: number; longitude: number }
+  photos?: { name: string }[]
+  primaryType?: string
+  regularOpeningHours?: { openNow?: boolean; weekdayDescriptions?: string[] }
+  websiteUri?: string
+  googleMapsUri?: string
+}
+
+interface TMEvent {
   id: string
   name: string
-  lat: number
-  lng: number
-  type: string
-  category: string
-  address?: string
-  distance?: number
+  url: string
+  dates: { start: { localDate: string; localTime?: string } }
+  _embedded?: { venues?: { name: string; location?: { latitude: string; longitude: string } }[] }
+  classifications?: { segment?: { name: string }; genre?: { name: string } }[]
+  images?: { url: string; width: number }[]
+  priceRanges?: { min: number; max: number; currency: string }[]
 }
 
 interface GeminiItinerary {
@@ -46,135 +66,171 @@ interface GeminiItinerary {
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
-const POI_ICONS: Record<string, string> = {
-  food: '🍜', art: '🎨', history: '🏛', nature: '🌿', event: '🎉',
-  shopping: '🛍', museum: '🖼', nightlife: '🌙', culture: '🎭',
-  photography: '📷', default: '📍',
+interface CatConfig { label: string; icon: string; textQuery: (city: string) => string; visitDuration: string; minRating?: number }
+
+const CATEGORIES: Record<string, CatConfig> = {
+  weather:       { label: 'Weather',       icon: '🌤', textQuery: () => '',    visitDuration: '' },
+  'fine-dining': { label: 'Fine Dining',   icon: '🍽', textQuery: c => `fine dining highly rated restaurants in ${c}`,             visitDuration: '1–2 hrs',    minRating: 4.5 },
+  'local-food':  { label: 'Local Food',    icon: '🍜', textQuery: c => `authentic local food regional specialties restaurants ${c}`, visitDuration: '45–90 min',  minRating: 4.0 },
+  'arts-culture':{ label: 'Arts & Culture',icon: '🎨', textQuery: c => `museums art galleries cultural centers historic landmarks ${c}`, visitDuration: '1–3 hrs', minRating: 4.0 },
+  shopping:      { label: 'Shopping',      icon: '🛍', textQuery: c => `boutiques vintage antique shops local stores bookstores ${c}`,  visitDuration: '1–2 hrs', minRating: 4.0 },
+  markets:       { label: 'Markets',       icon: '🏪', textQuery: c => `farmers market flea market food hall local market ${c}`,        visitDuration: '1–2 hrs', minRating: 4.0 },
+  events:        { label: 'Events',        icon: '🎭', textQuery: () => '',    visitDuration: '2–3 hrs' },
+  nightlife:     { label: 'Nightlife',     icon: '🌙', textQuery: c => `cocktail bars jazz clubs rooftop bars wine bars speakeasies ${c}`, visitDuration: '2–4 hrs', minRating: 4.0 },
+  scenic:        { label: 'Scenic',        icon: '🌿', textQuery: c => `scenic parks gardens waterfront viewpoints walking trails ${c}`,   visitDuration: '30–90 min', minRating: 4.0 },
+  'hidden-gems': { label: 'Hidden Gems',   icon: '💎', textQuery: c => `hidden gems local favorites unique spots secret places ${c}`,     visitDuration: '30–60 min', minRating: 4.0 },
+  itinerary:     { label: 'AI Plan',       icon: '✨', textQuery: () => '',    visitDuration: '' },
 }
 
-const FSQ_CATEGORIES: Record<string, string> = {
-  food:         '13065,13032,13003,13062',
-  art:          '10004,10000',
-  history:      '16011,10027',
-  culture:      '10000,10028',
-  events:       '10012',
-  nature:       '16032,16019',
-  architecture: '10040,16011',
-  museums:      '10027',
-  shopping:     '17114,17000',
-  nightlife:    '13003,13029',
-  traditions:   '10027,10000',
-  photography:  '16032,16000',
-}
+const CATEGORY_ORDER = ['weather','fine-dining','local-food','arts-culture','shopping','markets','events','nightlife','scenic','hidden-gems','itinerary']
 
-const FSQ_TYPE_MAP: Record<string, string> = {
-  '13': 'food', '10004': 'art', '10027': 'museum', '16011': 'history',
-  '10000': 'culture', '16032': 'nature', '16019': 'nature', '17': 'shopping',
-  '13029': 'nightlife', '10012': 'event', '10040': 'history',
+const PRICE_LABELS: Record<string, string> = {
+  PRICE_LEVEL_FREE:           'Free',
+  PRICE_LEVEL_INEXPENSIVE:    '$',
+  PRICE_LEVEL_MODERATE:       '$$',
+  PRICE_LEVEL_EXPENSIVE:      '$$$',
+  PRICE_LEVEL_VERY_EXPENSIVE: '$$$$',
 }
 
 const BOOKING_LINKS: Record<string, { label: string; url: string }> = {
-  LIRR:       { label: 'Buy LIRR Tickets on MTA.info', url: 'https://www.mta.info/lirr' },
-  MetroNorth: { label: 'Buy Metro-North Tickets on MTA.info', url: 'https://www.mta.info/mnr' },
-  PATH:       { label: 'PATH Fares & Schedules', url: 'https://www.panynj.gov/path/en/index.html' },
-  Amtrak:     { label: 'View All Routes on Amtrak.com', url: 'https://www.amtrak.com' },
+  LIRR:       { label: 'Buy LIRR Tickets',        url: 'https://www.mta.info/lirr' },
+  MetroNorth: { label: 'Buy Metro-North Tickets',  url: 'https://www.mta.info/mnr' },
+  PATH:       { label: 'PATH Fares & Schedules',   url: 'https://www.panynj.gov/path/en/index.html' },
+  Amtrak:     { label: 'View Routes on Amtrak.com',url: 'https://www.amtrak.com' },
 }
 
-const ALL_CATEGORIES = Object.keys(POI_ICONS).filter(k => k !== 'default')
+// ─── API helpers ──────────────────────────────────────────────────────────────
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseInterests(prompt: string): string[] {
-  const lower = prompt.toLowerCase()
-  return Object.keys(FSQ_CATEGORIES).filter(k => lower.includes(k) || lower.includes('#' + k))
+function daysUntil(dateStr: string): number {
+  if (!dateStr) return 0
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
 }
 
-function googleMapsUrl(q: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
-}
-
-// ─── API fetchers ─────────────────────────────────────────────────────────────
-
-async function fetchWeather(lat: number, lng: number): Promise<Weather | null> {
+async function fetchWeather(lat: number, lng: number, startDate: string): Promise<WeatherDay[]> {
   try {
+    const days = daysUntil(startDate)
+
+    if (startDate && days > 0 && days <= 5) {
+      // 5-day forecast (3-hour intervals)
+      const r = await fetch(
+        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lng}&appid=${OW_KEY}&units=imperial`
+      )
+      if (!r.ok) throw new Error('forecast failed')
+      const d = await r.json()
+      // Group by date
+      const grouped: Record<string, { highs: number[]; lows: number[]; icons: string[]; winds: number[]; pops: number[]; humids: number[]; descs: string[] }> = {}
+      for (const item of d.list) {
+        const date = item.dt_txt.slice(0, 10)
+        if (!grouped[date]) grouped[date] = { highs: [], lows: [], icons: [], winds: [], pops: [], humids: [], descs: [] }
+        grouped[date].highs.push(item.main.temp_max)
+        grouped[date].lows.push(item.main.temp_min)
+        grouped[date].icons.push(item.weather[0].icon)
+        grouped[date].winds.push(item.wind.speed)
+        grouped[date].pops.push((item.pop ?? 0) * 100)
+        grouped[date].humids.push(item.main.humidity)
+        grouped[date].descs.push(item.weather[0].description)
+      }
+      return Object.entries(grouped).slice(0, 5).map(([date, v]) => ({
+        date,
+        condition: v.descs[Math.floor(v.descs.length / 2)],
+        icon: `https://openweathermap.org/img/wn/${v.icons[Math.floor(v.icons.length / 2)]}@2x.png`,
+        high: Math.round(Math.max(...v.highs)),
+        low:  Math.round(Math.min(...v.lows)),
+        avg:  Math.round(v.highs.reduce((a, b) => a + b, 0) / v.highs.length),
+        precipitation: Math.round(Math.max(...v.pops)),
+        windSpeed: Math.round(v.winds.reduce((a, b) => a + b, 0) / v.winds.length),
+        humidity:  Math.round(v.humids.reduce((a, b) => a + b, 0) / v.humids.length),
+        isForecast: true,
+      }))
+    }
+
+    // Current weather
     const r = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${OW_KEY}&units=imperial`
     )
-    if (!r.ok) return null
-    const d = await r.json()
-    return {
-      temp:     Math.round(d.main.temp),
-      feels:    Math.round(d.main.feels_like),
-      desc:     d.weather[0].description,
-      icon:     `https://openweathermap.org/img/wn/${d.weather[0].icon}@2x.png`,
-      humidity: d.main.humidity,
-      wind:     Math.round(d.wind.speed),
-    }
-  } catch { return null }
-}
-
-async function fetchFoursquarePOIs(lat: number, lng: number, interests: string[]): Promise<FoursquarePOI[]> {
-  try {
-    const cats = interests.length > 0
-      ? [...new Set(interests.flatMap(i => (FSQ_CATEGORIES[i] ?? '').split(',')))].filter(Boolean).join(',')
-      : Object.values(FSQ_CATEGORIES).flatMap(v => v.split(',')).filter(Boolean).slice(0, 20).join(',')
-
-    const url = `https://api.foursquare.com/v3/places/search?ll=${lat},${lng}&radius=1500&limit=30&categories=${cats}`
-    const r = await fetch(url, {
-      headers: { Authorization: FSQ_KEY, Accept: 'application/json' },
-    })
     if (!r.ok) return []
     const d = await r.json()
-    return (d.results ?? []).map((p: Record<string, unknown>) => {
-      const cats = (p.categories as { id: number }[] | undefined) ?? []
-      const firstCat = String(cats[0]?.id ?? '')
-      const type = FSQ_TYPE_MAP[firstCat] ?? FSQ_TYPE_MAP[firstCat.slice(0, 2)] ?? 'default'
-      const geo = p.geocodes as { main?: { latitude: number; longitude: number } } | undefined
-      const loc = p.location as { formatted_address?: string } | undefined
-      return {
-        id:       String(p.fsq_id),
-        name:     String(p.name),
-        lat:      geo?.main?.latitude ?? lat,
-        lng:      geo?.main?.longitude ?? lng,
-        type,
-        category: (cats[0] as unknown as { name: string })?.name ?? '',
-        address:  loc?.formatted_address,
-        distance: p.distance as number | undefined,
-      } as FoursquarePOI
+    return [{
+      date: new Date().toISOString().slice(0, 10),
+      condition: d.weather[0].description,
+      icon: `https://openweathermap.org/img/wn/${d.weather[0].icon}@2x.png`,
+      high: Math.round(d.main.temp_max),
+      low:  Math.round(d.main.temp_min),
+      avg:  Math.round(d.main.temp),
+      precipitation: 0,
+      windSpeed: Math.round(d.wind.speed),
+      humidity: d.main.humidity,
+      isForecast: false,
+    }]
+  } catch { return [] }
+}
+
+async function fetchGooglePlaces(lat: number, lng: number, cityName: string, category: string): Promise<GooglePlace[]> {
+  if (!GOOGLE_KEY || GOOGLE_KEY === 'your_google_places_api_key') return []
+  const cfg = CATEGORIES[category]
+  if (!cfg?.textQuery) return []
+  const query = cfg.textQuery(cityName)
+  if (!query) return []
+  try {
+    const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_KEY,
+        'X-Goog-FieldMask': [
+          'places.id','places.displayName','places.rating','places.userRatingCount',
+          'places.priceLevel','places.formattedAddress','places.location','places.photos',
+          'places.primaryType','places.regularOpeningHours','places.websiteUri','places.googleMapsUri',
+        ].join(','),
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: 5000.0 } },
+        maxResultCount: 20,
+        ...(cfg.minRating ? { minRating: cfg.minRating } : {}),
+      }),
     })
+    if (!r.ok) { console.error('Google Places error', r.status, await r.json().catch(() => ({}))); return [] }
+    const d = await r.json()
+    return d.places ?? []
+  } catch (e) { console.error('Google Places fetch failed', e); return [] }
+}
+
+async function fetchTicketmaster(lat: number, lng: number, startDate: string, endDate: string): Promise<TMEvent[]> {
+  if (!TM_KEY || TM_KEY === 'your_ticketmaster_api_key') return []
+  try {
+    const params = new URLSearchParams({ apikey: TM_KEY, latlong: `${lat},${lng}`, radius: '25', unit: 'miles', size: '20' })
+    if (startDate) params.set('startDateTime', `${startDate}T00:00:00Z`)
+    if (endDate)   params.set('endDateTime',   `${endDate}T23:59:59Z`)
+    const r = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`)
+    if (!r.ok) return []
+    const d = await r.json()
+    return d._embedded?.events ?? []
   } catch { return [] }
 }
 
 async function fetchGeminiItinerary(
-  stops: TripStop[],
-  prompt: string,
-  weatherMap: Record<string, Weather | null>,
-  poisMap: Record<string, FoursquarePOI[]>,
-  model: GeminiModel,
+  stops: TripStop[], prompt: string, model: GeminiModel,
+  weatherMap: Record<string, WeatherDay[]>, startDate: string, endDate: string,
 ): Promise<GeminiItinerary | null> {
+  if (!GEM_KEY || GEM_KEY === 'your_gemini_api_key') return null
   try {
     const stopsText = stops.map(s => {
-      const w = weatherMap[s.id]
-      const pois = (poisMap[s.id] ?? []).slice(0, 10).map(p => `- ${p.name} (${p.category})`).join('\n')
-      return `
-Stop: ${s.displayName} (${s.system})
-Lines: ${s.lines.slice(0, 3).join(', ')}
-Weather: ${w ? `${w.temp}°F, ${w.desc}, ${w.humidity}% humidity` : 'unavailable'}
-Nearby places:
-${pois || '(no data)'}`
+      const w = weatherMap[s.id]?.[0]
+      return `Stop: ${s.displayName} (${s.system})\nLines: ${s.lines.slice(0, 3).join(', ')}\nWeather: ${w ? `${w.avg}°F, ${w.condition}` : 'unavailable'}`
     }).join('\n\n')
 
-    const systemPrompt = `You are an expert train travel planner for the US Northeast.
-Generate a detailed, personalized weekend trip itinerary based on the user's request.
-Respond ONLY with valid JSON — no markdown, no explanation, just the JSON object.`
+    const dateText = startDate ? `Travel dates: ${startDate} to ${endDate || startDate}` : 'Weekend trip'
 
-    const userPrompt = `Create a weekend trip itinerary for these train stops:
+    const fullPrompt = `You are an expert train travel planner for the US Northeast.
+Generate a detailed, personalized weekend trip itinerary. Respond ONLY with valid JSON.
 
+${dateText}
 ${stopsText}
 
-User's request: "${prompt || 'A fun weekend trip'}"
+User request: "${prompt || 'A fun weekend trip'}"
 
-Respond with this exact JSON structure:
+Respond with this exact JSON structure (no markdown, no explanation):
 {
   "overview": "2-3 sentence trip overview",
   "highlights": ["highlight 1", "highlight 2", "highlight 3"],
@@ -195,25 +251,128 @@ Respond with this exact JSON structure:
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+        generationConfig: { temperature: 0.7 },
       }),
     })
-    if (!r.ok) return null
+    if (!r.ok) { const e = await r.json().catch(() => ({})); console.error('Gemini error', r.status, e); return null }
     const d = await r.json()
     const raw = d.candidates?.[0]?.content?.parts?.[0]?.text
     if (!raw) return null
-    return JSON.parse(raw) as GeminiItinerary
-  } catch { return null }
+    const cleaned = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
+    return JSON.parse(cleaned) as GeminiItinerary
+  } catch (e) { console.error('Gemini failed', e); return null }
 }
 
-// ─── Map helpers ──────────────────────────────────────────────────────────────
+function photoUrl(photoName: string) {
+  return `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&key=${GOOGLE_KEY}`
+}
+
+function googleMapsLink(place: GooglePlace) {
+  return place.googleMapsUri ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName.text)}`
+}
+
+// ─── Map helper ───────────────────────────────────────────────────────────────
 
 function MapRecenter({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap()
   useEffect(() => { map.flyTo([lat, lng], 14, { duration: 1 }) }, [lat, lng, map])
   return null
+}
+
+// ─── Place card ───────────────────────────────────────────────────────────────
+
+function PlaceCard({ place, category }: { place: GooglePlace; category: string }) {
+  const cfg = CATEGORIES[category]
+  const photo = place.photos?.[0]?.name ? photoUrl(place.photos[0].name) : null
+  const isOpen = place.regularOpeningHours?.openNow
+
+  return (
+    <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+      {photo && (
+        <img src={photo} alt={place.displayName.text} className="w-full h-32 object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+      )}
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <p className="font-semibold text-sm text-gray-800 dark:text-white leading-tight">{place.displayName.text}</p>
+          {place.priceLevel && (
+            <span className="text-xs text-gray-400 flex-shrink-0 font-medium">{PRICE_LABELS[place.priceLevel] ?? ''}</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          {place.rating && (
+            <span className="text-xs font-semibold text-amber-500">⭐ {place.rating.toFixed(1)}</span>
+          )}
+          {place.userRatingCount && (
+            <span className="text-xs text-gray-400">({place.userRatingCount.toLocaleString()} reviews)</span>
+          )}
+          {isOpen !== undefined && (
+            <span className={`text-xs font-semibold ${isOpen ? 'text-green-500' : 'text-red-400'}`}>
+              {isOpen ? '● Open' : '● Closed'}
+            </span>
+          )}
+        </div>
+
+        {place.formattedAddress && (
+          <p className="text-xs text-gray-400 mb-2 leading-relaxed">{place.formattedAddress}</p>
+        )}
+
+        {place.regularOpeningHours?.weekdayDescriptions?.[0] && (
+          <p className="text-xs text-gray-400 mb-2 truncate">🕐 {place.regularOpeningHours.weekdayDescriptions[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1]}</p>
+        )}
+
+        {cfg.visitDuration && (
+          <p className="text-xs text-blue-400 mb-2">⏱ Est. visit: {cfg.visitDuration}</p>
+        )}
+
+        <div className="flex gap-2 mt-2">
+          <a href={googleMapsLink(place)} target="_blank" rel="noopener noreferrer"
+            className="flex-1 text-center text-xs py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-lg border border-blue-100 dark:border-blue-800 hover:bg-blue-100 transition-colors font-semibold">
+            📌 Google Maps
+          </a>
+          {place.websiteUri && (
+            <a href={place.websiteUri} target="_blank" rel="noopener noreferrer"
+              className="flex-1 text-center text-xs py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 transition-colors font-semibold">
+              🌐 Website
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Event card ───────────────────────────────────────────────────────────────
+
+function EventCard({ event }: { event: TMEvent }) {
+  const venue = event._embedded?.venues?.[0]
+  const genre = event.classifications?.[0]?.genre?.name
+  const seg   = event.classifications?.[0]?.segment?.name
+  const img   = event.images?.sort((a, b) => b.width - a.width)[0]?.url
+  const price = event.priceRanges?.[0]
+
+  return (
+    <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+      {img && <img src={img} alt={event.name} className="w-full h-32 object-cover" />}
+      <div className="p-3">
+        <p className="font-semibold text-sm text-gray-800 dark:text-white mb-1 leading-tight">{event.name}</p>
+        <div className="flex flex-wrap gap-1 mb-2">
+          {seg && <span className="text-[10px] px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 rounded-full font-semibold">{seg}</span>}
+          {genre && genre !== seg && <span className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-full">{genre}</span>}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+          📅 {event.dates.start.localDate}{event.dates.start.localTime ? ` · ${event.dates.start.localTime.slice(0, 5)}` : ''}
+        </p>
+        {venue && <p className="text-xs text-gray-400 mb-1">📍 {venue.name}</p>}
+        {price && <p className="text-xs text-green-500 font-semibold mb-2">${price.min}–${price.max} {price.currency}</p>}
+        <a href={event.url} target="_blank" rel="noopener noreferrer"
+          className="block w-full text-center text-xs py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-lg border border-blue-100 dark:border-blue-800 hover:bg-blue-100 transition-colors font-semibold">
+          🎟 Get Tickets
+        </a>
+      </div>
+    </div>
+  )
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -222,374 +381,379 @@ interface Props {
   selectedStops: TripStop[]
   prompt: string
   model: GeminiModel
+  startDate: string
+  endDate: string
   onBack: () => void
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function TripResult({ selectedStops, prompt, model, onBack }: Props) {
+export default function TripResult({ selectedStops, prompt, model, startDate, endDate, onBack }: Props) {
   const [activeStop, setActiveStop] = useState<TripStop>(selectedStops[0])
-  const [weatherMap, setWeatherMap]   = useState<Record<string, Weather | null>>({})
-  const [poisMap, setPoisMap]         = useState<Record<string, FoursquarePOI[]>>({})
-  const [itinerary, setItinerary]     = useState<GeminiItinerary | null>(null)
-  const [itinLoading, setItinLoading] = useState(true)
-  const [itinError, setItinError]     = useState(false)
-  const [poisLoading, setPoisLoading] = useState(false)
-  const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set(ALL_CATEGORIES))
+  const [activeTab,  setActiveTab]  = useState('weather')
 
-  const interests = parseInterests(prompt)
-  const booking   = BOOKING_LINKS[activeStop.system]
-  const systemIcon = { LIRR: '🚋', MetroNorth: '🚉', PATH: '🚇', Amtrak: '🚂' }[activeStop.system] ?? '🚂'
-  const systemLabel = activeStop.system === 'MetroNorth' ? 'Metro-North' : activeStop.system
+  // Per-stop, per-category cache
+  const [placeCache, setPlaceCache]   = useState<Record<string, Record<string, GooglePlace[]>>>({})
+  const [eventCache, setEventCache]   = useState<Record<string, TMEvent[]>>({})
+  const [weatherCache, setWeatherCache] = useState<Record<string, WeatherDay[]>>({})
+  const [loadingTabs, setLoadingTabs] = useState<Set<string>>(new Set())
+  const [itinerary,    setItinerary]  = useState<GeminiItinerary | null>(null)
+  const [itinLoading,  setItinLoading]= useState(false)
+  const [itinError,    setItinError]  = useState(false)
 
-  const activePois = poisMap[activeStop.id] ?? []
-  const visiblePois = activePois.filter(p => activeCategories.has(p.type) || p.type === 'default')
+  const stopKey = activeStop.id
 
-  const allOn = activeCategories.size === ALL_CATEGORIES.length
-  const toggleAll = () => setActiveCategories(allOn ? new Set() : new Set(ALL_CATEGORIES))
-  const toggleCat = (c: string) => setActiveCategories(prev => {
-    const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n
-  })
-
-  // Fetch weather for all stops on mount
+  // Fetch weather for active stop
   useEffect(() => {
-    selectedStops.forEach(stop => {
-      fetchWeather(stop.lat, stop.lng).then(w =>
-        setWeatherMap(prev => ({ ...prev, [stop.id]: w }))
-      )
+    if (weatherCache[stopKey] !== undefined) return
+    fetchWeather(activeStop.lat, activeStop.lng, startDate).then(days => {
+      setWeatherCache(prev => ({ ...prev, [stopKey]: days }))
     })
-  }, [])
+  }, [stopKey])
 
-  // Fetch Foursquare POIs when active stop changes
+  // Lazy-fetch places/events when tab changes
   useEffect(() => {
-    if (poisMap[activeStop.id] !== undefined) return
-    setPoisLoading(true)
-    fetchFoursquarePOIs(activeStop.lat, activeStop.lng, interests)
-      .then(pois => setPoisMap(prev => ({ ...prev, [activeStop.id]: pois })))
-      .finally(() => setPoisLoading(false))
-  }, [activeStop.id])
+    if (activeTab === 'weather' || activeTab === 'itinerary') return
+    const cacheKey = `${stopKey}::${activeTab}`
 
-  // Call Gemini once all weather + first stop's POIs are ready (or after 4s timeout)
-  useEffect(() => {
-    setItinLoading(true)
-    setItinError(false)
-
-    // Fetch all stops' POIs first then call Gemini
-    const fetchAll = async () => {
-      const allPois: Record<string, FoursquarePOI[]> = {}
-      const allWeather: Record<string, Weather | null> = {}
-      await Promise.all(selectedStops.map(async s => {
-        allPois[s.id]    = await fetchFoursquarePOIs(s.lat, s.lng, interests)
-        allWeather[s.id] = await fetchWeather(s.lat, s.lng)
-      }))
-      setPoisMap(allPois)
-      setWeatherMap(allWeather)
-
-      const result = await fetchGeminiItinerary(selectedStops, prompt, allWeather, allPois, model)
-      if (result) { setItinerary(result); setItinError(false) }
-      else setItinError(true)
-      setItinLoading(false)
+    if (activeTab === 'events') {
+      if (eventCache[stopKey] !== undefined) return
+      setLoadingTabs(prev => new Set(prev).add(cacheKey))
+      fetchTicketmaster(activeStop.lat, activeStop.lng, startDate, endDate).then(events => {
+        setEventCache(prev => ({ ...prev, [stopKey]: events }))
+        setLoadingTabs(prev => { const n = new Set(prev); n.delete(cacheKey); return n })
+      })
+    } else {
+      if (placeCache[stopKey]?.[activeTab] !== undefined) return
+      setLoadingTabs(prev => new Set(prev).add(cacheKey))
+      fetchGooglePlaces(activeStop.lat, activeStop.lng, activeStop.displayName, activeTab).then(places => {
+        setPlaceCache(prev => ({ ...prev, [stopKey]: { ...(prev[stopKey] ?? {}), [activeTab]: places } }))
+        setLoadingTabs(prev => { const n = new Set(prev); n.delete(cacheKey); return n })
+      })
     }
-    fetchAll()
-  }, [])
+  }, [activeTab, stopKey])
 
-  const weather = weatherMap[activeStop.id]
+  // Fetch Gemini itinerary when itinerary tab opened (once)
+  useEffect(() => {
+    if (activeTab !== 'itinerary' || itinerary || itinLoading) return
+    setItinLoading(true); setItinError(false)
+    fetchGeminiItinerary(selectedStops, prompt, model, weatherCache, startDate, endDate).then(result => {
+      if (result) setItinerary(result); else setItinError(true)
+      setItinLoading(false)
+    })
+  }, [activeTab])
+
+  const weather  = weatherCache[stopKey] ?? []
+  const places   = placeCache[stopKey]?.[activeTab] ?? []
+  const events   = eventCache[stopKey] ?? []
+  const isLoading = loadingTabs.has(`${stopKey}::${activeTab}`)
+  const booking  = BOOKING_LINKS[activeStop.system]
+  const systemIcon = { LIRR: '🚋', MetroNorth: '🚉', PATH: '🚇', Amtrak: '🚂' }[activeStop.system] ?? '🚂'
+
+  // Map markers for active tab
+  const mapMarkers: { lat: number; lng: number; label: string; icon: string }[] = activeTab === 'events'
+    ? events
+        .filter(e => e._embedded?.venues?.[0]?.location)
+        .map(e => ({
+          lat: parseFloat(e._embedded!.venues![0].location!.latitude),
+          lng: parseFloat(e._embedded!.venues![0].location!.longitude),
+          label: e.name, icon: '🎭',
+        }))
+    : places.map(p => ({ lat: p.location.latitude, lng: p.location.longitude, label: p.displayName.text, icon: CATEGORIES[activeTab]?.icon ?? '📍' }))
+
   const stopItinerary = itinerary?.stops.find(s =>
     s.stopName.toLowerCase().includes(activeStop.name.toLowerCase()) ||
     activeStop.name.toLowerCase().includes(s.stopName.toLowerCase())
   ) ?? itinerary?.stops[selectedStops.findIndex(s => s.id === activeStop.id)] ?? null
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
+    <div className="flex h-[calc(100vh-64px)]">
 
-      {/* ── Left info panel ── */}
-      <div className="w-full lg:w-[28rem] flex-shrink-0 overflow-y-auto bg-white dark:bg-gray-800 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      {/* ── Left panel ── */}
+      <div className="w-80 flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-hidden">
 
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
-          <button onClick={onBack} className="text-blue-500 hover:text-blue-600 text-sm flex items-center gap-1 mb-3">
-            ← Back to map
-          </button>
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <button onClick={onBack} className="text-blue-500 hover:text-blue-600 text-sm flex items-center gap-1 mb-3">← Back to map</button>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Your Trip Plan</h2>
-            <span className="text-xs px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-semibold">
-              🤖 {model === 'gemini-2.5-pro' ? 'Gemini Pro' : 'Gemini Flash'}
+            <h2 className="text-base font-bold text-gray-800 dark:text-white">Your Trip</h2>
+            <span className="text-[10px] px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-semibold">
+              🤖 {model.replace('gemini-', '').replace('-', ' ')}
             </span>
           </div>
-          {prompt && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 italic line-clamp-2">"{prompt}"</p>
+          {prompt && <p className="text-xs text-gray-400 italic mb-2 line-clamp-2">"{prompt}"</p>}
+          {startDate && (
+            <p className="text-xs text-blue-400 mb-2">📅 {startDate}{endDate && endDate !== startDate ? ` → ${endDate}` : ''}</p>
           )}
-          {interests.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-2">
-              {interests.map(i => (
-                <span key={i} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full text-[10px] font-semibold">#{i}</span>
-              ))}
-            </div>
-          )}
+          {/* Stop selector */}
           <div className="flex flex-wrap gap-1.5">
             {selectedStops.map((s, i) => (
               <button key={s.id} onClick={() => setActiveStop(s)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all border ${
                   activeStop.id === s.id
-                    ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300'
+                    ? 'bg-blue-500 text-white border-blue-500'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300'
                 }`}>
-                {i > 0 && <span className="opacity-60 mr-1">→</span>}{s.name}
+                {i > 0 && <span className="opacity-50 mr-1">→</span>}{s.name}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Category tabs (vertical) */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0 overflow-x-auto">
+          {CATEGORY_ORDER.map(cat => {
+            const cfg = CATEGORIES[cat]
+            return (
+              <button key={cat} onClick={() => setActiveTab(cat)}
+                className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 text-xs transition-all border-b-2 ${
+                  activeTab === cat
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}>
+                <span className="text-base">{cfg.icon}</span>
+                <span className="font-medium" style={{ fontSize: 9 }}>{cfg.label}</span>
+              </button>
+            )
+          })}
+        </div>
 
-          {/* Stop photo + info */}
-          <img src={activeStop.photo} alt={activeStop.name} className="w-full h-36 object-cover rounded-xl" />
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">{systemIcon}</span>
-              <h3 className="text-xl font-bold text-gray-800 dark:text-white">{activeStop.displayName}</h3>
-            </div>
-            {activeStop.tagline && <p className="text-blue-500 text-sm font-medium italic">{activeStop.tagline}</p>}
-          </div>
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto p-3">
 
-          {/* Weather card */}
-          {weather ? (
-            <div className="flex items-center gap-3 bg-sky-50 dark:bg-sky-900/20 rounded-xl p-3 border border-sky-100 dark:border-sky-800">
-              <img src={weather.icon} alt={weather.desc} className="w-12 h-12" />
+          {/* Weather tab */}
+          {activeTab === 'weather' && (
+            <div className="space-y-3">
+              <img src={activeStop.photo} alt={activeStop.name} className="w-full h-28 object-cover rounded-xl" />
               <div>
-                <p className="font-bold text-gray-800 dark:text-white text-lg">{weather.temp}°F
-                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">feels {weather.feels}°F</span>
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 capitalize">{weather.desc}</p>
-                <p className="text-xs text-gray-400">💧 {weather.humidity}% · 💨 {weather.wind} mph</p>
+                <h3 className="font-bold text-gray-800 dark:text-white">{systemIcon} {activeStop.displayName}</h3>
+                {activeStop.tagline && <p className="text-xs text-blue-400 italic mt-0.5">{activeStop.tagline}</p>}
               </div>
-            </div>
-          ) : (
-            <div className="h-16 bg-sky-50 dark:bg-sky-900/20 rounded-xl border border-sky-100 dark:border-sky-800 flex items-center justify-center">
-              <span className="text-xs text-sky-400 animate-pulse">Loading weather…</span>
+
+              {weather.length === 0 && (
+                <div className="h-20 bg-sky-50 dark:bg-sky-900/20 rounded-xl flex items-center justify-center">
+                  <span className="text-xs text-sky-400 animate-pulse">Loading weather…</span>
+                </div>
+              )}
+
+              {weather.map((day, i) => (
+                <div key={i} className="bg-sky-50 dark:bg-sky-900/20 rounded-xl p-3 border border-sky-100 dark:border-sky-800">
+                  {weather.length > 1 && (
+                    <p className="text-xs font-bold text-sky-600 dark:text-sky-400 mb-2">
+                      {i === 0 ? 'Today' : new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {day.isForecast && <span className="ml-2 text-[10px] bg-sky-100 dark:bg-sky-800 px-1.5 py-0.5 rounded-full">Forecast</span>}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <img src={day.icon} alt={day.condition} className="w-12 h-12 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-bold text-gray-800 dark:text-white">
+                        {day.high}°<span className="text-gray-400 font-normal"> / {day.low}°F</span>
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{day.condition}</p>
+                      <div className="flex gap-3 mt-1 text-[10px] text-gray-400">
+                        <span>💧 {day.humidity}%</span>
+                        <span>💨 {day.windSpeed} mph</span>
+                        {day.precipitation > 0 && <span>🌧 {day.precipitation}% rain</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {!startDate && weather.length > 0 && (
+                <p className="text-[10px] text-gray-400 text-center">Add travel dates above for a 5-day forecast</p>
+              )}
+
+              {/* Train booking */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-100 dark:border-blue-800">
+                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">{systemIcon} {activeStop.system === 'MetroNorth' ? 'Metro-North' : activeStop.system}</p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {activeStop.lines.slice(0, 4).map(l => (
+                    <span key={l} className="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-800/50 text-blue-600 dark:text-blue-300 rounded font-medium">{l}</span>
+                  ))}
+                </div>
+                <a href={booking.url} target="_blank" rel="noopener noreferrer"
+                  className="block text-center text-xs py-2 bg-white dark:bg-gray-700 text-blue-500 border border-blue-200 dark:border-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-semibold">
+                  {booking.label} →
+                </a>
+              </div>
             </div>
           )}
 
-          {/* AI Itinerary */}
-          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800">
-            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2 flex items-center gap-2">
-              ✨ AI Itinerary
-              {itinLoading && <span className="text-xs text-purple-400 font-normal animate-pulse">Generating with {model === 'gemini-2.5-pro' ? 'Gemini Pro' : 'Gemini Flash'}…</span>}
-            </h4>
-
-            {itinError && (
-              <p className="text-xs text-red-400">Couldn't generate itinerary — check your Gemini API key in .env</p>
-            )}
-
-            {itinerary && !itinLoading && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{itinerary.overview}</p>
-                {itinerary.highlights.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {itinerary.highlights.map((h, i) => (
-                      <span key={i} className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-800/50 text-purple-700 dark:text-purple-300 rounded-full">{h}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {stopItinerary && !itinLoading && (
-              <div className="mt-3 space-y-3">
-                <div>
-                  <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1.5">Day 1</p>
-                  <div className="space-y-1.5">
-                    {stopItinerary.day1.map((item, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5">{item.time}</span>
-                        <div>
-                          <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{item.activity}</p>
-                          {item.tip && <p className="text-xs text-gray-400 italic">{item.tip}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+          {/* Places tabs (Google Places) */}
+          {activeTab !== 'weather' && activeTab !== 'events' && activeTab !== 'itinerary' && (
+            <div>
+              {!GOOGLE_KEY || GOOGLE_KEY === 'your_google_places_api_key' ? (
+                <div className="text-center py-8">
+                  <p className="text-2xl mb-2">{CATEGORIES[activeTab]?.icon}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Google Places API key required</p>
+                  <p className="text-xs text-gray-400">Add <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">VITE_GOOGLE_PLACES_KEY</code> to your .env</p>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1.5">Day 2</p>
-                  <div className="space-y-1.5">
-                    {stopItinerary.day2.map((item, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5">{item.time}</span>
-                        <div>
-                          <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{item.activity}</p>
-                          {item.tip && <p className="text-xs text-gray-400 italic">{item.tip}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              ) : isLoading ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-48 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}
                 </div>
-                {stopItinerary.localTips.length > 0 && (
-                  <div>
-                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1">Local Tips</p>
-                    {stopItinerary.localTips.map((t, i) => (
-                      <p key={i} className="text-xs text-gray-500 dark:text-gray-400">• {t}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {itinerary && (
-              <div className="mt-3 pt-3 border-t border-purple-100 dark:border-purple-800">
-                <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1">Best time to go</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">{itinerary.bestTimeToGo}</p>
-                {itinerary.packingList.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-1">Pack</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{itinerary.packingList.join(' · ')}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Train info */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
-            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2">{systemIcon} Getting There by {systemLabel}</h4>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {activeStop.lines.slice(0, 4).map(line => (
-                <span key={line} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">{line}</span>
-              ))}
-            </div>
-            <a href={booking.url} target="_blank" rel="noopener noreferrer"
-              className="block w-full text-center bg-white dark:bg-gray-700 text-blue-500 border border-blue-300 dark:border-blue-600 rounded-lg py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors font-semibold">
-              {booking.label}
-            </a>
-          </div>
-
-          {/* Foursquare places */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-bold text-gray-800 dark:text-white text-sm">
-                📍 Nearby Places
-                <span className="ml-1 font-normal text-gray-400 text-xs">via Foursquare</span>
-              </h4>
-              {poisLoading && <span className="text-xs text-blue-400 animate-pulse">Loading…</span>}
-            </div>
-            <div className="space-y-2">
-              {visiblePois.slice(0, 20).map((poi, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
-                  <span className="text-xl flex-shrink-0">{POI_ICONS[poi.type] ?? POI_ICONS.default}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-800 dark:text-white">{poi.name}</p>
-                    {poi.category && <p className="text-xs text-gray-400">{poi.category}</p>}
-                    {poi.address && <p className="text-xs text-gray-400 mt-0.5">{poi.address}</p>}
-                    {poi.distance && <p className="text-xs text-gray-300">{poi.distance}m away</p>}
-                  </div>
-                  <a href={googleMapsUrl(poi.name + ' near ' + activeStop.displayName)}
-                    target="_blank" rel="noopener noreferrer"
-                    className="flex-shrink-0 text-xs px-2 py-1 bg-white dark:bg-gray-600 rounded-lg border border-gray-200 dark:border-gray-500 hover:bg-gray-50 transition-colors font-medium whitespace-nowrap">
-                    📌 Save
-                  </a>
+              ) : places.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-2xl mb-2">{CATEGORIES[activeTab]?.icon}</p>
+                  <p className="text-sm text-gray-400">No results found near {activeStop.name}</p>
                 </div>
-              ))}
-              {!poisLoading && activePois.length === 0 && (
-                <p className="text-xs text-gray-400 italic">No places found — check your Foursquare API key in .env</p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 mb-2">{places.length} places found near {activeStop.name}</p>
+                  {places.map(p => <PlaceCard key={p.id} place={p} category={activeTab} />)}
+                </div>
               )}
             </div>
-          </div>
+          )}
 
-          <div className="pb-4" />
+          {/* Events tab (Ticketmaster) */}
+          {activeTab === 'events' && (
+            <div>
+              {!TM_KEY || TM_KEY === 'your_ticketmaster_api_key' ? (
+                <div className="text-center py-8">
+                  <p className="text-2xl mb-2">🎭</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Ticketmaster API key required</p>
+                  <p className="text-xs text-gray-400">Add <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">VITE_TICKETMASTER_KEY</code> to your .env</p>
+                </div>
+              ) : isLoading ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-48 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}
+                </div>
+              ) : events.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-2xl mb-2">🎭</p>
+                  <p className="text-sm text-gray-400">No events found{startDate ? ' for these dates' : ''} near {activeStop.name}</p>
+                  {!startDate && <p className="text-xs text-gray-400 mt-1">Add travel dates to filter events</p>}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 mb-2">{events.length} events near {activeStop.name}</p>
+                  {events.map(e => <EventCard key={e.id} event={e} />)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* AI Itinerary tab */}
+          {activeTab === 'itinerary' && (
+            <div className="space-y-4">
+              {itinLoading && (
+                <div className="text-center py-8">
+                  <div className="text-3xl mb-3 animate-spin">✨</div>
+                  <p className="text-sm text-purple-500 font-semibold">Generating with {model}…</p>
+                  <p className="text-xs text-gray-400 mt-1">Building your personalized itinerary</p>
+                </div>
+              )}
+              {itinError && (
+                <div className="text-center py-8">
+                  <p className="text-2xl mb-2">🤖</p>
+                  <p className="text-sm text-red-400">Couldn't generate itinerary</p>
+                  <p className="text-xs text-gray-400 mt-1">Check your Gemini API key in .env</p>
+                </div>
+              )}
+              {itinerary && !itinLoading && (
+                <>
+                  <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800">
+                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-2">Overview</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{itinerary.overview}</p>
+                    {itinerary.highlights.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-3">
+                        {itinerary.highlights.map((h, i) => (
+                          <span key={i} className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-800/50 text-purple-700 dark:text-purple-300 rounded-full">{h}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {stopItinerary && (
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">{activeStop.name} Schedule</h4>
+
+                      {[{ label: 'Day 1', items: stopItinerary.day1 }, { label: 'Day 2', items: stopItinerary.day2 }].map(({ label, items }) => (
+                        <div key={label} className="bg-white dark:bg-gray-700/50 rounded-xl p-3 border border-gray-100 dark:border-gray-600">
+                          <p className="text-xs font-bold text-purple-500 uppercase tracking-wide mb-2">{label}</p>
+                          <div className="space-y-2">
+                            {items.map((item, i) => (
+                              <div key={i} className="flex gap-2">
+                                <span className="text-xs text-gray-400 w-16 flex-shrink-0 pt-0.5 font-medium">{item.time}</span>
+                                <div>
+                                  <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{item.activity}</p>
+                                  {item.tip && <p className="text-[10px] text-gray-400 italic mt-0.5">{item.tip}</p>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      {stopItinerary.localTips.length > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 border border-amber-100 dark:border-amber-800">
+                          <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-2">Local Tips</p>
+                          {stopItinerary.localTips.map((t, i) => <p key={i} className="text-xs text-gray-600 dark:text-gray-400">• {t}</p>)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 border border-green-100 dark:border-green-800">
+                      <p className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wide mb-1">Best Time</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">{itinerary.bestTimeToGo}</p>
+                    </div>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-100 dark:border-blue-800">
+                      <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">Pack</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">{itinerary.packingList.join(' · ')}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Right: legend + map ── */}
-      <div className="flex-1 flex min-h-[400px] lg:min-h-0">
+      {/* ── Map ── */}
+      <div className="flex-1 relative">
+        <MapContainer center={[activeStop.lat, activeStop.lng]} zoom={14} style={{ height: '100%', width: '100%' }}>
+          <TileLayer
+            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+          />
+          <MapRecenter lat={activeStop.lat} lng={activeStop.lng} />
 
-        {/* Filter sidebar */}
-        <div className="w-44 flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-y-auto z-[500]">
-          <div className="p-3 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
-            <p className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-2 uppercase tracking-wide">Filter Map</p>
-            <button onClick={toggleAll}
-              className={`w-full text-xs font-semibold py-1.5 rounded-lg border transition-all ${
-                allOn
-                  ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300'
-              }`}>
-              {allOn ? '✓ All On' : 'All Off'}
-            </button>
-          </div>
-          <div className="flex-1 p-2 space-y-1">
-            {ALL_CATEGORIES.map(cat => {
-              const on = activeCategories.has(cat)
-              const count = activePois.filter(p => p.type === cat).length
-              return (
-                <button key={cat} onClick={() => toggleCat(cat)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all border ${
-                    on
-                      ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                      : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-                  }`}>
-                  <span className={on ? '' : 'grayscale opacity-40'}>{POI_ICONS[cat]}</span>
-                  <span className="flex-1 text-left capitalize font-medium">{cat}</span>
-                  {count > 0 && (
-                    <span className={`text-[10px] font-bold rounded-full px-1.5 ${
-                      on ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-400'
-                    }`}>{count}</span>
-                  )}
-                </button>
-              )
-            })}
-            <div className="border-t border-gray-200 dark:border-gray-600 mt-2 pt-2">
-              <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400">
-                <span>{systemIcon}</span><span>Station</span>
-              </div>
-            </div>
-          </div>
-        </div>
+          {/* Station */}
+          <Marker position={[activeStop.lat, activeStop.lng]}
+            icon={L.divIcon({
+              className: '',
+              html: `<div style="font-size:28px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">${{ LIRR:'🚋',MetroNorth:'🚉',PATH:'🚇',Amtrak:'🚂' }[activeStop.system] ?? '🚂'}</div>`,
+              iconSize: [32, 32], iconAnchor: [16, 16],
+            })}>
+            <Popup><b>{activeStop.displayName}</b></Popup>
+          </Marker>
 
-        {/* Map */}
-        <div className="flex-1 relative">
-          <MapContainer center={[activeStop.lat, activeStop.lng]} zoom={14} style={{ height: '100%', width: '100%' }}>
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-            />
-            <MapRecenter lat={activeStop.lat} lng={activeStop.lng} />
-
-            {/* Station marker */}
-            <Marker position={[activeStop.lat, activeStop.lng]}
+          {/* POI / event markers */}
+          {mapMarkers.map((m, i) => (
+            <Marker key={i} position={[m.lat, m.lng]}
               icon={L.divIcon({
                 className: '',
-                html: `<div style="font-size:28px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">${systemIcon}</div>`,
-                iconSize: [32, 32], iconAnchor: [16, 16],
+                html: `<div style="background:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${m.icon}</div>`,
+                iconSize: [28, 28], iconAnchor: [14, 14],
               })}>
-              <Popup>
-                <b>{activeStop.displayName}</b><br />
-                {weather && <span>{weather.temp}°F, {weather.desc}</span>}
-              </Popup>
+              <Popup><b>{m.label}</b></Popup>
             </Marker>
+          ))}
+        </MapContainer>
 
-            {/* POI markers */}
-            {visiblePois.map((poi, i) => (
-              <Marker key={i} position={[poi.lat, poi.lng]}
-                icon={L.divIcon({
-                  className: '',
-                  html: `<div style="background:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);cursor:pointer;">${POI_ICONS[poi.type] ?? POI_ICONS.default}</div>`,
-                  iconSize: [28, 28], iconAnchor: [14, 14],
-                })}>
-                <Popup>
-                  <div style={{ minWidth: 180 }}>
-                    <p style={{ fontWeight: 700, marginBottom: 4, fontSize: 13 }}>{poi.name}</p>
-                    {poi.category && <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>{poi.category}</p>}
-                    {poi.address && <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>{poi.address}</p>}
-                    <a href={googleMapsUrl(poi.name + ' near ' + activeStop.displayName)}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>
-                      📌 Save to Google Maps →
-                    </a>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+        {/* Active tab label overlay */}
+        <div className="absolute top-3 left-3 z-[500] bg-white dark:bg-gray-800 rounded-xl px-3 py-1.5 shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2">
+          <span>{CATEGORIES[activeTab]?.icon}</span>
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{CATEGORIES[activeTab]?.label}</span>
+          {mapMarkers.length > 0 && (
+            <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full px-1.5 font-bold">{mapMarkers.length}</span>
+          )}
         </div>
       </div>
     </div>
