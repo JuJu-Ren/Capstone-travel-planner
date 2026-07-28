@@ -135,11 +135,11 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 border-t-2 border-blue-100 dark:border-gray-700 px-6 py-5">
+    <div className="bg-white dark:bg-gray-800 border-t-2 border-blue-100 dark:border-gray-700 px-6 py-3">
       <div className="max-w-4xl mx-auto">
 
         {/* Location + travel dates, all in one row */}
-        <div className="mb-4">
+        <div className="mb-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[220px] min-h-[32px] flex items-center">
             {selectedStops.length === 0 ? (
@@ -222,7 +222,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
         </div>
 
         {/* Prompt */}
-        <div className="relative mb-3">
+        <div className="relative mb-2 max-w-2xl">
           <div className="flex items-center gap-2 mb-2">
             <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Tell us what you'd like to explore</label>
             <div className="relative">
@@ -265,7 +265,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
         </div>
 
         {/* Hashtag chips */}
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-3">
           <button
             onClick={toggleAllTags}
             className={`px-3 py-1.5 rounded-full text-sm border font-semibold transition-all ${

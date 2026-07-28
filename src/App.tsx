@@ -1557,7 +1557,6 @@ export default function App() {
                   {startDate && <span className="text-sm font-normal text-gray-400">· {startDate}{endDate && endDate !== startDate ? ` → ${endDate}` : ''}</span>}
                 </h3>
                 {currentStop && (() => {
-                  const w = weatherCache[currentStop.id]
                   const booking = currentStop.system === 'Custom'
                     ? { label: 'Open in Google Maps', url: `https://www.google.com/maps/search/?api=1&query=${currentStop.lat},${currentStop.lng}` }
                     : BOOKING_LINKS[currentStop.system]
