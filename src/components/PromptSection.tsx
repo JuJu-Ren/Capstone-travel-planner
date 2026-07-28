@@ -222,7 +222,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
         </div>
 
         {/* Prompt */}
-        <div className="relative mb-3 max-w-2xl">
+        <div className="relative mb-3">
           <div className="flex items-center gap-2 mb-2">
             <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Tell us what you'd like to explore</label>
             <div className="relative">
@@ -250,7 +250,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
             placeholder="e.g. I love fine dining and jazz bars. Weekend trip with my partner — relaxed pace, great cocktails and hidden gems..."
-            rows={3}
+            rows={2}
             className="w-full px-4 py-3 pb-10 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
           />
           <select
@@ -298,9 +298,9 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
           <button
             onClick={() => onGenerate(prompt, model, startDate, endDate)}
             disabled={selectedStops.length === 0}
-            className="btn-primary px-8 py-3 text-base disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            className="btn-primary px-8 py-3 text-base disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <span>🚂</span> Plan My Trip
+            Plan My Trip
           </button>
           {selectedStops.length === 0 && (
             <p className="text-sm text-gray-400">← Select at least one stop on the map</p>

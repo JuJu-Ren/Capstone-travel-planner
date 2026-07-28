@@ -32,6 +32,33 @@ function BrandIcon({ className }: { className: string }) {
   )
 }
 
+function TrainIcon({ className }: { className: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* Train cabin front */}
+      <rect x="4" y="3" width="7" height="5" rx="1" fill="#8ec2f2" stroke="#2f6fed" strokeWidth="1.2" />
+      {/* Front windows */}
+      <circle cx="6" cy="5.5" r="0.7" fill="#2f6fed" />
+      <circle cx="9" cy="5.5" r="0.7" fill="#2f6fed" />
+      {/* Train body */}
+      <rect x="2" y="9" width="20" height="7" rx="1" fill="#8ec2f2" stroke="#2f6fed" strokeWidth="1.2" />
+      {/* Side windows */}
+      <rect x="4" y="11" width="1.5" height="1.5" fill="none" stroke="#2f6fed" strokeWidth="0.8" />
+      <rect x="7" y="11" width="1.5" height="1.5" fill="none" stroke="#2f6fed" strokeWidth="0.8" />
+      <rect x="10" y="11" width="1.5" height="1.5" fill="none" stroke="#2f6fed" strokeWidth="0.8" />
+      <rect x="13" y="11" width="1.5" height="1.5" fill="none" stroke="#2f6fed" strokeWidth="0.8" />
+      <rect x="16" y="11" width="1.5" height="1.5" fill="none" stroke="#2f6fed" strokeWidth="0.8" />
+      {/* Wheels */}
+      <circle cx="5.5" cy="17.5" r="1.2" fill="none" stroke="#2f6fed" strokeWidth="1.2" />
+      <circle cx="12" cy="17.5" r="1.2" fill="none" stroke="#2f6fed" strokeWidth="1.2" />
+      <circle cx="18.5" cy="17.5" r="1.2" fill="none" stroke="#2f6fed" strokeWidth="1.2" />
+      {/* Coupling */}
+      <line x1="1" y1="12" x2="2" y2="12" stroke="#2f6fed" strokeWidth="1" strokeLinecap="round" />
+      <line x1="22" y1="12" x2="23" y2="12" stroke="#2f6fed" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 interface HeaderProps {
   onNavigate: () => void
   googleUser: GoogleProfile | null
@@ -92,17 +119,19 @@ export default function Header({ onNavigate, googleUser, hasGoogleAuth, signInCo
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleSavedClick}
-            title={googleUser ? 'Saved places' : 'Sign in to view your saved places'}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="12" fill="#e0b81e" />
-              <path d="M16 6.5H8a1 1 0 0 0-1 1V18l5-3.8 5 3.8V7.5a1 1 0 0 0-1-1z" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
-            </svg>
-            Saved{savedPlacesCount > 0 ? ` (${savedPlacesCount})` : ''}
-          </button>
+          {googleUser && (
+            <button
+              onClick={handleSavedClick}
+              title="Saved places"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="12" fill="#e0b81e" />
+                <path d="M16 6.5H8a1 1 0 0 0-1 1V18l5-3.8 5 3.8V7.5a1 1 0 0 0-1-1z" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+              </svg>
+              Saved{savedPlacesCount > 0 ? ` (${savedPlacesCount})` : ''}
+            </button>
+          )}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">Amtrak · NJ Transit · PATH · Subway</span>
@@ -111,9 +140,10 @@ export default function Header({ onNavigate, googleUser, hasGoogleAuth, signInCo
           {showRoutesToggle && (
             <button
               onClick={onToggleRoutes}
-              className="px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
-              🚂 Routes {routesOn ? 'On' : 'Off'}
+              <TrainIcon className="w-4 h-4 flex-shrink-0" />
+              Routes {routesOn ? 'On' : 'Off'}
             </button>
           )}
 

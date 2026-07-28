@@ -22,7 +22,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold;
+    @apply px-4 py-2 text-white rounded-lg transition-colors font-semibold;
+    background-color: #2f6fed;
+  }
+  
+  .btn-primary:hover {
+    background-color: #1e4ba8;
   }
   
   .btn-secondary {
