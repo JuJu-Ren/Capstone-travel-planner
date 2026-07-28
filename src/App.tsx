@@ -707,7 +707,7 @@ PERSONALIZATION REQUIREMENT: This itinerary must clearly read as written for THI
 
 First, give an overall recommendation for this trip:
 - verdict: "Recommended", "Mixed", or "Not Recommended" — judged by cross-referencing the ACTUAL weather above against the user's stated interests. If the itinerary leans outdoor/hiking-heavy and the weather is hot, humid, stormy, or otherwise harsh, that should pull toward "Mixed" or "Not Recommended." If the plan is mostly indoor (museums, dining, shopping, nightlife) the weather matters much less. If the weather is genuinely pleasant for the planned activities, say so plainly as "Recommended."
-- reasoning: 2-3 sentences explaining the verdict in plain terms, naming the user's specific interests/tags and how the weather does or doesn't suit them (e.g. "it'll be hot and humid outside, and since you're into hiking and scenic spots, expect to feel it" or "the weather is mild and dry — great conditions for the nightlife and fine dining plans you picked").
+- reasoning: 1 sentence only. Keep it concise and to the point. Explain how the weather suits the trip's overall tone without listing individual interests/tags.
 
 Then, for EACH stop, provide all of the following, grounded in real, specific facts about that place (not generic filler):
 - introduction: 2-3 sentences on what the place is known for and its historical significance — why it matters, not just what it is. Tie it back to at least one of the user's stated interests/tags by name.
@@ -1167,6 +1167,9 @@ export default function App() {
         onSignOut={handleSignOut}
         savedPlacesCount={Object.values(savedLists).reduce((n, l) => n + l.places.length, 0)}
         onOpenSavedPlaces={() => setShowSavedPlaces(true)}
+        showRoutesToggle
+        routesOn={showLines}
+        onToggleRoutes={() => setShowLines(v => !v)}
       />
       <div className="flex flex-1 overflow-hidden">
 
@@ -1198,7 +1201,14 @@ export default function App() {
                       ? 'bg-blue-500 border-blue-500 shadow-md'
                       : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                   }`}>
-                  <span className="text-xl">🗂</span>
+                  <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="#2f6fed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    {/* Top layer */}
+                    <path d="M12 2L22 8V12L12 18L2 12V8L12 2Z" />
+                    {/* Middle layer */}
+                    <path d="M12 8L22 14V18L12 24L2 18V14L12 8Z" opacity="0.7" />
+                    {/* Bottom layer */}
+                    <path d="M12 14L22 20V24L12 30L2 24V20L12 14Z" opacity="0.4" />
+                  </svg>
                   <span className={`text-xs font-semibold leading-tight text-center ${activeCategory === 'all' ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}>All</span>
                 </button>
                 <div className="border-t border-gray-100 dark:border-gray-700 my-0.5" />
@@ -1207,14 +1217,17 @@ export default function App() {
             {selectedCategories.map(cat => {
                 const cfg = CATEGORY_CONFIG[cat]
                 const active = activeCategory === cat
+                const color = CATEGORY_COLORS[cat] || '#7c3aed'
                 return (
                   <button key={cat} onClick={() => handleCategoryClick(cat)} title={cfg.label}
-                    className={`w-full flex flex-col items-center gap-0.5 py-2 rounded-xl transition-all border ${
+                    className={`w-full flex flex-col items-center gap-1.5 py-2 rounded-xl transition-all border ${
                       active
                         ? 'bg-blue-500 border-blue-500 shadow-md'
                         : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                     }`}>
-                    <img src={cfg.img} alt={cfg.label} className="w-7 h-7 object-contain" />
+                    <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '22px', color: color }}>
+                      {cfg.icon}
+                    </div>
                     <span className={`text-xs font-semibold leading-tight text-center ${active ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                       {cfg.label.split(' ').map((w, i) => <span key={i} className="block">{w}</span>)}
                     </span>
@@ -1228,106 +1241,8 @@ export default function App() {
         {/* ── Centre + right: map + panel + below ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
-          {/* Trip summary + edit — above the map */}
-          {editingTrip ? (
-            <TripEditBar
-              currentStop={currentStop}
-              startDate={startDate}
-              endDate={endDate}
-              onSearch={handleUpdateTrip}
-              onCancel={() => setEditingTrip(false)}
-            />
-          ) : (
-            <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 px-4 py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 min-w-0">
-                <span className="font-semibold truncate">📍 {currentStop?.displayName}</span>
-                {startDate && (
-                  <span className="text-gray-400 flex-shrink-0">· {startDate}{endDate && endDate !== startDate ? ` → ${endDate}` : ''}</span>
-                )}
-              </div>
-              <button onClick={() => setEditingTrip(true)} className="text-xs font-semibold text-blue-500 hover:text-blue-700 flex-shrink-0">
-                ✏️ Edit
-              </button>
-            </div>
-          )}
-
-          {/* Weather bar — above the map */}
-          {currentStop && (() => {
-            const isRange = startDate && endDate && endDate !== startDate
-            const days = isRange ? forecastCache[currentStop.id] : null
-            const w    = weatherCache[currentStop.id]
-            const mmdd = (iso: string) => { const [,m,d] = iso.split('-'); return `${m}/${d}` }
-
-            const unitToggle = (
-              <button
-                onClick={() => setTempUnit(u => u === 'F' ? 'C' : 'F')}
-                title="Switch temperature unit"
-                className="flex-shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:border-blue-400 hover:text-blue-500 transition-colors"
-              >°{tempUnit}</button>
-            )
-
-            if (isRange && days && days.length > 0) {
-              return (
-                <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-                  {unitToggle}
-                  <div className="flex items-center justify-center gap-1 flex-1 overflow-x-auto">
-                    {days.map((day, i) => (
-                      <div key={i} className="flex flex-col items-center px-2 min-w-[44px]">
-                        <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{mmdd(day.date!)}</span>
-                        {day.available === false ? (
-                          <>
-                            <span className="text-lg leading-none my-0.5 opacity-30">❔</span>
-                            <span className="text-xs text-gray-400 leading-tight text-center">TBD</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-lg leading-none my-0.5">{wxEmoji(day.iconCode)}</span>
-                            <span className="text-sm font-bold text-gray-800 dark:text-white">{convertTemp(day.high)}°</span>
-                            <span className="text-xs text-gray-400">{convertTemp(day.low)}°</span>
-                            <span className="text-xs text-blue-400">
-                              💧{day.precipitation}{day.isHistorical ? 'mm' : '%'}
-                            </span>
-                            {day.isHistorical && (
-                              <span className="flex items-center gap-0.5 mt-0.5">
-                                <span className="text-xs text-amber-500 font-semibold leading-tight text-center">{day.historicalYear} data</span>
-                                <button
-                                  onClick={() => setShowWeatherInfo(true)}
-                                  title="Why is this historical data?"
-                                  aria-label="Why is this historical data?"
-                                  className="w-3.5 h-3.5 flex-shrink-0 rounded-full border border-amber-400 text-amber-500 text-[9px] font-bold flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
-                                >i</button>
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            }
-
-            if (!w) return null
-            return (
-              <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-                {unitToggle}
-                <div className="flex flex-col items-center justify-center flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl leading-none">{wxEmoji(w.iconCode)}</span>
-                    <span className="text-xs font-bold text-gray-800 dark:text-white">{convertTemp(w.high)}° / {convertTemp(w.low)}°{tempUnit}</span>
-                    {startDate && <>
-                      <span className="text-gray-300 dark:text-gray-600">|</span>
-                      <span className="text-xs text-gray-400">{mmdd(startDate)}</span>
-                    </>}
-                  </div>
-                  <span className="text-sm text-blue-500 mt-0.5">* Chance of precipitation: {w.precipitation}%</span>
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* Map row */}
-          <div className="relative flex-1 min-h-0">
+          {/* Map row — takes up maximum space */}
+          <div className="relative flex-1 bg-white dark:bg-gray-800">
             <TrainMap
               selectedStops={selectedStops}
               onSelectStop={() => {}}
@@ -1346,12 +1261,18 @@ export default function App() {
                   iconMode: (activeCategory && activeCategory !== 'all' ? 'dot' : 'icon') as 'dot' | 'icon',
                 }))}
               onMarkerClick={handleMarkerClick}
+              showLines={showLines}
+              onToggleLines={() => setShowLines(v => !v)}
             />
 
             {/* Category label overlay */}
             {activeCategory && !panelMinimized && (
               <div className="absolute top-3 left-3 z-[500] bg-white dark:bg-gray-800 rounded-xl px-3 py-1.5 shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2 pointer-events-none">
-                {activeCategory === 'all' ? <span>🗂</span> : <img src={catCfg?.img} alt={catCfg?.label} className="w-5 h-5 object-contain" />}
+                {activeCategory === 'all' ? (
+                  <div className="w-5 h-5 flex items-center justify-center" style={{ fontSize: '14px', color: '#2f6fed' }}>🗂</div>
+                ) : (
+                  <div className="w-5 h-5 flex items-center justify-center" style={{ fontSize: '14px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}>{CATEGORY_CONFIG[activeCategory]?.icon}</div>
+                )}
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{activeCategory === 'all' ? 'All Places' : catCfg?.label}</span>
                 {activeCategoryCount > 0 && <span className="text-sm bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full px-1.5 font-bold">{activeCategoryCount}</span>}
               </div>
@@ -1362,19 +1283,34 @@ export default function App() {
               <div className={`absolute top-0 right-0 h-full bg-white dark:bg-gray-800 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 z-[500] ${panelMinimized ? 'w-10' : 'w-96'}`}>
                 {/* Minimize toggle */}
                 <button onClick={() => setPanelMinimized(p => !p)}
-                  className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-12 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-l-lg flex items-center justify-center shadow-md text-gray-500 hover:text-blue-500 transition-colors z-10 text-xs font-bold">
-                  {panelMinimized ? '◀' : '▶'}
+                  className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all z-10"
+                  title={panelMinimized ? 'Expand' : 'Collapse'}>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="#1e88e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    {panelMinimized ? (
+                      <polyline points="15 18 9 12 15 6" />
+                    ) : (
+                      <polyline points="9 18 15 12 9 6" />
+                    )}
+                  </svg>
                 </button>
 
                 {panelMinimized ? (
                   <div className="flex-1 flex flex-col items-center pt-16">
-                    {activeCategory === 'all' ? <span className="text-xl">🗂</span> : <img src={catCfg?.img} alt={catCfg?.label} className="w-6 h-6 object-contain" />}
+                    {activeCategory === 'all' ? (
+                      <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '20px', color: '#2f6fed' }}>🗂</div>
+                    ) : (
+                      <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '20px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}>{CATEGORY_CONFIG[activeCategory]?.icon}</div>
+                    )}
                   </div>
                 ) : (
                   <>
                     <div className="p-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        {activeCategory === 'all' ? <span className="text-lg flex-shrink-0">🗂</span> : <img src={catCfg?.img} alt={catCfg?.label} className="w-6 h-6 object-contain flex-shrink-0" />}
+                        {activeCategory === 'all' ? (
+                          <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center" style={{ fontSize: '20px', color: '#2f6fed' }}>🗂</div>
+                        ) : (
+                          <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center" style={{ fontSize: '20px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}>{CATEGORY_CONFIG[activeCategory]?.icon}</div>
+                        )}
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-800 dark:text-white truncate">{activeCategory === 'all' ? 'All Places' : catCfg?.label}</p>
                           <p className="text-sm text-gray-400 truncate">near {currentStop?.name}</p>
@@ -1409,7 +1345,7 @@ export default function App() {
                               if (catPlaces.length === 0 && catEvents.length === 0) return null
                               return (
                                 <div key={cat}>
-                                  <div className="flex items-center gap-1.5 mb-1.5"><img src={cfg.img} alt={cfg.label} className="w-4 h-4 object-contain" /><p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{cfg.label}</p></div>
+                                  <div className="flex items-center gap-1.5 mb-1.5"><div className="w-4 h-4 flex items-center justify-center" style={{ fontSize: '12px', color: CATEGORY_COLORS[cat] || '#7c3aed' }}>{cfg.icon}</div><p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{cfg.label}</p></div>
                                   <div className="space-y-2">
                                     {cat === 'events'
                                       ? catEvents.slice(0, 3).map(e => <EventCard key={e.id} event={e} onSelect={setSelectedEvent} />)
@@ -1466,36 +1402,158 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* White space below map + Location/Time edit bar at bottom — aligned with right panel */}
+          <div className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800">
+            
+            {/* Trip summary + edit — at the bottom */}
+            {editingTrip ? (
+              <TripEditBar
+                currentStop={currentStop}
+                startDate={startDate}
+                endDate={endDate}
+                onSearch={handleUpdateTrip}
+                onCancel={() => setEditingTrip(false)}
+              />
+            ) : (
+              <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 px-5 py-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200 min-w-0">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+                    <ellipse cx="12" cy="19.3" rx="7.4" ry="2.2" fill="none" stroke="#2f6fed" strokeWidth="1.3" />
+                    <path d="M12 2.2c-4.1 0-7.4 3.2-7.4 7.2 0 5.3 7.4 11.4 7.4 11.4s7.4-6.1 7.4-11.4c0-4-3.3-7.2-7.4-7.2z" fill="#8ec2f2" stroke="#2f6fed" strokeWidth="1.3" />
+                    <circle cx="12" cy="9.3" r="2.6" fill="#fff" stroke="#2f6fed" strokeWidth="1.3" />
+                  </svg>
+                  <span className="font-semibold truncate">{currentStop?.displayName}</span>
+                  {startDate && (
+                    <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">· {startDate}{endDate && endDate !== startDate ? ` → ${endDate}` : ''}</span>
+                  )}
+                </div>
+                <button onClick={() => setEditingTrip(true)} className="text-sm font-semibold text-blue-500 hover:text-blue-700 flex-shrink-0 transition-colors flex items-center gap-1">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="#2f6fed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Edit
+                </button>
+              </div>
+            )}
+
+            {/* Weather bar — at the bottom */}
+            {currentStop && startDate && (() => {
+              const isRange = startDate && endDate && endDate !== startDate
+              const days = isRange ? forecastCache[currentStop.id] : null
+              const w    = weatherCache[currentStop.id]
+              const mmdd = (iso: string) => { const [,m,d] = iso.split('-'); return `${m}/${d}` }
+
+              const unitToggle = (
+                <button
+                  onClick={() => setTempUnit(u => u === 'F' ? 'C' : 'F')}
+                  title="Switch temperature unit"
+                  className="flex-shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:border-blue-400 hover:text-blue-500 transition-colors"
+                >°{tempUnit}</button>
+              )
+
+              if (isRange && days && days.length > 0) {
+                return (
+                  <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+                    {unitToggle}
+                    <div className="flex items-center justify-center gap-1 flex-1 overflow-x-auto">
+                      {days.map((day, i) => (
+                        <div key={i} className="flex flex-col items-center px-2 min-w-[44px]">
+                          <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{mmdd(day.date!)}</span>
+                          {day.available === false ? (
+                            <>
+                              <span className="text-lg leading-none my-0.5 opacity-30">❔</span>
+                              <span className="text-xs text-gray-400 leading-tight text-center">TBD</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-lg leading-none my-0.5">{wxEmoji(day.iconCode)}</span>
+                              <span className="text-sm font-bold text-gray-800 dark:text-white">{convertTemp(day.high)}°</span>
+                              <span className="text-xs text-gray-400">{convertTemp(day.low)}°</span>
+                              <span className="text-xs text-blue-400">
+                                💧{day.precipitation}{day.isHistorical ? 'mm' : '%'}
+                              </span>
+                              {day.isHistorical && (
+                                <span className="flex items-center gap-0.5 mt-0.5">
+                                  <span className="text-xs text-amber-500 font-semibold leading-tight text-center">{day.historicalYear} data</span>
+                                  <button
+                                    onClick={() => setShowWeatherInfo(true)}
+                                    title="Why is this historical data?"
+                                    aria-label="Why is this historical data?"
+                                    className="w-3.5 h-3.5 flex-shrink-0 rounded-full border border-amber-400 text-amber-500 text-[9px] font-bold flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                                  >i</button>
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              }
+
+              if (!w) return null
+              return (
+                <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+                  {unitToggle}
+                  <div className="flex flex-col items-center justify-center flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl leading-none">{wxEmoji(w.iconCode)}</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white">{convertTemp(w.high)}° / {convertTemp(w.low)}°{tempUnit}</span>
+                      {startDate && <>
+                        <span className="text-gray-300 dark:text-gray-600">|</span>
+                        <span className="text-xs text-gray-400">{mmdd(startDate)}</span>
+                      </>}
+                    </div>
+                    <span className="text-sm text-blue-500 mt-0.5">* Chance of precipitation: {w.precipitation}%</span>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
         </div>
         </div>
         </div>
 
         {/* ── Right 40%: AI itinerary results ── */}
         {resultsPanelMinimized ? (
-          <div className="flex flex-col items-center pt-4 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0" style={{ width: '44px' }}>
+          <div className="flex flex-col items-center border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0" style={{ width: '44px' }}>
+            {/* Expand button - fixed on screen, centered vertically */}
             <button
               onClick={() => setResultsPanelMinimized(false)}
               title="Expand AI suggestions"
               aria-label="Expand AI suggestions"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            >◀</button>
+              className="fixed w-6 h-6 flex items-center justify-center hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              style={{ right: 'calc(44px - 6px)', top: '50%', transform: 'translateY(-50%)' }}
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="#1e88e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
           </div>
         ) : (
         <div className="flex flex-col overflow-y-auto border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-200" style={{ width: '40%' }}>
-            <div className="p-5 space-y-6">
+            {/* Minimize button - fixed on screen, centered vertically, stays visible when scrolling */}
+            <button
+              onClick={() => setResultsPanelMinimized(true)}
+              title="Minimize panel and expand map"
+              aria-label="Minimize panel and expand map"
+              className="fixed w-6 h-6 flex items-center justify-center hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors z-40"
+              style={{ right: 'calc(40% - 6px)', top: '50%', transform: 'translateY(-50%)' }}
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="#1e88e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
 
-              {/* Minimize button */}
-              <button
-                onClick={() => setResultsPanelMinimized(true)}
-                title="Minimize panel and expand map"
-                aria-label="Minimize panel and expand map"
-                className="flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-blue-500 -mb-2 transition-colors"
-              >▶ Minimize</button>
+            <div className="p-5 space-y-6">
 
               {/* Stop summary cards */}
               <div>
                 <h3 className="text-base font-bold text-gray-700 dark:text-white mb-3 flex items-center gap-2">
-                  🗺 Your Stops
+                  {currentStop?.displayName || 'Your Stops'}
                   {startDate && <span className="text-sm font-normal text-gray-400">· {startDate}{endDate && endDate !== startDate ? ` → ${endDate}` : ''}</span>}
                 </h3>
                 {currentStop && (() => {
@@ -1516,32 +1574,6 @@ export default function App() {
                         ))}
                       </div>
                       <div className="p-4">
-                        <p className="font-bold text-gray-800 dark:text-white text-base mb-1">{SYS_ICON[currentStop.system]} {currentStop.displayName}</p>
-                        {currentStop.tagline && <p className="text-xs text-blue-400 italic mb-2">{currentStop.tagline}</p>}
-                        {w ? (
-                          <div className="flex items-center gap-2 mb-2 bg-sky-50 dark:bg-sky-900/20 rounded-lg p-2">
-                            <span className="text-2xl leading-none">{wxEmoji(w.iconCode)}</span>
-                            <div>
-                              <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{convertTemp(w.high)}° / {convertTemp(w.low)}°{tempUnit}</p>
-                              <p className="text-xs text-gray-400 capitalize flex items-center gap-1">
-                                <span>
-                                  {w.condition}
-                                  {w.isForecast ? ' · Forecast' : w.isHistorical ? ` · ${w.historicalYear} data` : ''}
-                                </span>
-                                {w.isHistorical && (
-                                  <button
-                                    onClick={() => setShowWeatherInfo(true)}
-                                    title="Why is this historical data?"
-                                    aria-label="Why is this historical data?"
-                                    className="w-3.5 h-3.5 flex-shrink-0 rounded-full border border-amber-400 text-amber-500 text-[9px] font-bold flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors normal-case"
-                                  >i</button>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="h-10 bg-sky-50 dark:bg-sky-900/20 rounded-lg mb-2 animate-pulse" />
-                        )}
                         <div className="flex flex-wrap gap-1.5 mb-3">
                           {currentStop.lines.slice(0, 4).map(l => <span key={l} className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded font-medium">{l}</span>)}
                         </div>
@@ -1557,10 +1589,6 @@ export default function App() {
 
               {/* Gemini suggestions */}
               <div>
-                <h3 className="text-base font-bold text-gray-700 dark:text-white mb-3 flex items-center gap-2">
-                  ✨ AI Suggestions
-                  <span className="text-sm font-normal text-purple-400">· {model.replace('gemini-', 'Gemini ').replace(/-/g, ' ')}</span>
-                </h3>
 
                 {itinLoading && (
                   <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800 text-center">
@@ -1590,23 +1618,6 @@ export default function App() {
                 )}
                 {itinerary && !itinLoading && (
                   <div className="space-y-4">
-                    {itinerary.recommendation && (() => {
-                      const verdict = itinerary.recommendation.verdict
-                      const style = verdict === 'Recommended'
-                        ? { wrap: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-300', label: 'text-green-600 dark:text-green-400', icon: '✅' }
-                        : verdict === 'Not Recommended'
-                          ? { wrap: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800', text: 'text-red-700 dark:text-red-300', label: 'text-red-600 dark:text-red-400', icon: '⚠️' }
-                          : { wrap: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800', text: 'text-amber-700 dark:text-amber-300', label: 'text-amber-600 dark:text-amber-400', icon: '⚖️' }
-                      return (
-                        <div className={`rounded-xl p-4 border flex gap-3 items-start ${style.wrap}`}>
-                          <span className="text-2xl leading-none flex-shrink-0">{style.icon}</span>
-                          <div>
-                            <p className={`text-sm font-extrabold uppercase tracking-wide mb-1 ${style.label}`}>{verdict}</p>
-                            <p className={`text-sm leading-relaxed ${style.text}`}>{itinerary.recommendation.reasoning}</p>
-                          </div>
-                        </div>
-                      )
-                    })()}
                     <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800">
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">{itinerary.overview}</p>
                       <div className="flex flex-wrap gap-1.5">
@@ -1908,7 +1919,7 @@ function TripEditBar({ currentStop, startDate, endDate, onSearch, onCancel }: {
   }
 
   return (
-    <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 px-4 py-2 flex flex-wrap items-center gap-2">
+    <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 px-5 py-3 flex flex-wrap items-center gap-3">
       <div className="relative flex-1 min-w-[160px]">
         <input
           value={query}
@@ -1916,14 +1927,14 @@ function TripEditBar({ currentStop, startDate, endDate, onSearch, onCancel }: {
           onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           placeholder="Search a new location…"
-          className="w-full px-3 py-1.5 border border-gray-200 dark:border-gray-600 rounded-full bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-full bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
         {showSuggestions && suggestions.length > 0 && (
           <ul className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg max-h-48 overflow-y-auto">
             {suggestions.map((s, i) => (
               <li key={i}>
                 <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => pickSuggestion(s)}
-                  className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
                   📍 {s.displayName}
                 </button>
               </li>
@@ -1932,16 +1943,16 @@ function TripEditBar({ currentStop, startDate, endDate, onSearch, onCancel }: {
         )}
       </div>
       <input type="date" value={sd} min={today} onChange={e => handleSd(e.target.value)}
-        className="px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/60 text-xs text-gray-800 dark:text-white" />
-      <span className="text-gray-400 text-xs">→</span>
+        className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/60 text-sm text-gray-800 dark:text-white" />
+      <span className="text-gray-400 text-sm">→</span>
       <input ref={edRef} type="date" value={ed} min={sd || today} onChange={e => handleEd(e.target.value)}
-        className="px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/60 text-xs text-gray-800 dark:text-white" />
-      <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1">Cancel</button>
+        className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/60 text-sm text-gray-800 dark:text-white" />
+      <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2">Cancel</button>
       <button
         onClick={() => finalStop && onSearch(finalStop, sd, ed)}
         disabled={!finalStop}
-        className="btn-primary text-xs px-4 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-      >🔍 Search</button>
+        className="btn-primary text-base px-8 py-2 disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+      >Search</button>
     </div>
   )
 }

@@ -18,6 +18,11 @@ export const CATEGORY_COLORS: Record<string, string> = {
   nightlife:      '#1d4ed8',
   scenic:         '#22c55e',
   'hidden-gems':  '#f59e0b',
+  activities:     '#64748b',
+  coffee:         '#a16207',
+  breweries:      '#7c2d12',
+  family:         '#d946ef',
+  wellness:       '#06b6d4',
 }
 
 // Singleton promise so the <script> is only injected once
@@ -38,18 +43,18 @@ function loadGoogleMaps(key: string): Promise<void> {
 function markerSvg(icon: string, color: string, dim: boolean) {
   const opacity = dim ? '0.25' : '1'
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="38">
-      <circle cx="19" cy="19" r="17" fill="${color}" stroke="white" stroke-width="2.5" opacity="${opacity}"/>
-      <text x="19" y="24" text-anchor="middle" font-size="15">${icon}</text>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+      <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2" opacity="${opacity}"/>
+      <text x="14" y="18" text-anchor="middle" font-size="12">${icon}</text>
     </svg>`
   )}`
 }
 
 function stationSvg(icon: string) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44">
-      <circle cx="22" cy="22" r="20" fill="#7c3aed" stroke="white" stroke-width="3"/>
-      <text x="22" y="28" text-anchor="middle" font-size="18">${icon}</text>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <circle cx="16" cy="16" r="14" fill="#7c3aed" stroke="white" stroke-width="2.5"/>
+      <text x="16" y="21" text-anchor="middle" font-size="13">${icon}</text>
     </svg>`
   )}`
 }
@@ -112,8 +117,8 @@ export default function GoogleResultMap({ center, centerIcon, centerLabel, marke
       zIndex: 999,
       icon: {
         url: stationSvg(centerIcon),
-        scaledSize: new g.maps.Size(44, 44),
-        anchor: new g.maps.Point(22, 22),
+        scaledSize: new g.maps.Size(32, 32),
+        anchor: new g.maps.Point(16, 16),
       },
     })
     stationGM.current.addListener('click', () => {
@@ -140,8 +145,8 @@ export default function GoogleResultMap({ center, centerIcon, centerLabel, marke
         zIndex: dim ? 1 : 10,
         icon: {
           url: markerSvg(m.icon, m.color, dim),
-          scaledSize: new g.maps.Size(38, 38),
-          anchor: new g.maps.Point(19, 19),
+          scaledSize: new g.maps.Size(28, 28),
+          anchor: new g.maps.Point(14, 14),
         },
       })
       gm.addListener('click', () => {

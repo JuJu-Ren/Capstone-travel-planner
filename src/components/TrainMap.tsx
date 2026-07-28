@@ -384,7 +384,7 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
       ))}
 
       {/* MTA stops */}
-      {allMTAStops.map(stop => {
+      {showLines && allMTAStops.map(stop => {
         if (!showHubStops) return null
         if (!showAllStops && !stop.isHub) return null
 
@@ -422,7 +422,7 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
       })}
 
       {/* Amtrak cities */}
-      {cities.map(city => {
+      {showLines && cities.map(city => {
         const sel     = isSelected(city.id)
         const idx     = selIndex(city.id)
         const blocked = !sel && atMax
