@@ -14,6 +14,12 @@
   }
 }
 
+/* Tint the native date-picker calendar icon to match the location pin's blue (#2f6fed) */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(37%) sepia(93%) saturate(1808%) hue-rotate(202deg) brightness(97%) contrast(96%);
+  cursor: pointer;
+}
+
 @layer components {
   .btn-primary {
     @apply px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold;

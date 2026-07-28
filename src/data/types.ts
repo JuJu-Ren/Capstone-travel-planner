@@ -9,7 +9,7 @@ export interface TripStop {
   lat: number
   lng: number
   photo: string
-  system: 'Amtrak' | 'LIRR' | 'MetroNorth' | 'PATH'
+  system: 'Amtrak' | 'LIRR' | 'MetroNorth' | 'PATH' | 'Custom'
   lines: string[]
   dotColor: string
   // Rich data – Amtrak cities only

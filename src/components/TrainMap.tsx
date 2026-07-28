@@ -168,11 +168,9 @@ function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, ke
         )}
         <p style={{
           fontSize: 11, margin: 0, fontWeight: 700,
-          color: selected ? '#d97706' : blocked ? '#ef4444' : '#3b82f6',
+          color: selected ? '#d97706' : '#3b82f6',
         }}>
-          {selected ? `✓ Stop ${selIdx + 1} selected · click to remove`
-            : blocked ? 'Max 3 stops reached'
-            : 'Click marker to add to trip'}
+          {selected ? `✓ ${name} selected · click to remove` : 'Click marker to add to trip'}
         </p>
       </div>
     </div>
@@ -264,10 +262,15 @@ function makeDot(_color: string, size: number, selected: boolean): L.DivIcon {
 
 // ─── Map helpers ──────────────────────────────────────────────────────────────
 
+// flyTo() (and setView with animate:true, for long jumps) arcs through a
+// zoomed-out midpoint to fly across the map — with maxBounds + full
+// maxBoundsViscosity set, that midpoint view can exceed the bounds and gets
+// snapped back, cancelling the whole move. An unanimated setView jumps
+// straight there without ever leaving bounds.
 function LocationZoom({ location }: { location: { lat: number; lng: number } | null }) {
   const map = useMap()
   useEffect(() => {
-    if (location) map.flyTo([location.lat, location.lng], 10, { duration: 1.5 })
+    if (location) map.setView([location.lat, location.lng], 10, { animate: false })
   }, [location, map])
   return null
 }
@@ -280,21 +283,59 @@ function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+export interface ExternalMarker {
+  lat: number; lng: number; label: string; icon: string
+  color?: string; dim?: boolean; id?: string; highlighted?: boolean; iconMode?: 'icon' | 'dot'
+}
+
 interface Props {
   selectedStops: TripStop[]
   onSelectStop: (stop: TripStop) => void
   userLocation: { lat: number; lng: number } | null
+  externalMarkers?: ExternalMarker[]
+  focusLocation?: { lat: number; lng: number; zoom?: number }
+  onMarkerClick?: (markerId: string) => void
+  // Optional controlled routes-toggle — when provided, the toggle button is rendered
+  // by the caller (e.g. in the header) instead of the built-in footer bar below the map.
+  showLines?: boolean
+  onToggleLines?: () => void
 }
 
-export default function TrainMap({ selectedStops, onSelectStop, userLocation }: Props) {
+function FocusLocation({ location }: { location?: { lat: number; lng: number; zoom?: number } }) {
+  const map = useMap()
+  useEffect(() => {
+    if (location) map.setView([location.lat, location.lng], location.zoom ?? 13, { animate: false })
+  }, [location?.lat, location?.lng, map])
+  return null
+}
+
+// Leaflet caches its container's pixel size and only re-measures on the browser's own
+// resize event — it has no way to notice a CSS-driven resize (e.g. the results panel
+// collapsing and the map's own container growing to fill the freed width), so without
+// this the newly revealed area just stays blank/grey until the window itself resizes.
+function ResizeHandler() {
+  const map = useMap()
+  useEffect(() => {
+    const container = map.getContainer()
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [map])
+  return null
+}
+
+export default function TrainMap({ selectedStops, onSelectStop, userLocation, externalMarkers = [], focusLocation, onMarkerClick, showLines: showLinesProp, onToggleLines }: Props) {
   const [zoom, setZoom] = useState(NY_ZOOM)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [showLines, setShowLines] = useState(true)
+  const [showLinesState, setShowLinesState] = useState(true)
+  const isLinesControlled = showLinesProp !== undefined
+  const showLines = isLinesControlled ? showLinesProp : showLinesState
+  const toggleLines = onToggleLines ?? (() => setShowLinesState(l => !l))
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isSelected = (id: string) => selectedStops.some(s => s.id === id)
   const selIndex   = (id: string) => selectedStops.findIndex(s => s.id === id)
-  const atMax      = selectedStops.length >= 3
+  const atMax      = selectedStops.length >= 1
 
   const showHubStops = zoom >= 10
   const showAllStops = zoom >= 11
@@ -309,24 +350,8 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
   const handleOut  = () => startClose()
 
   return (
-    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-      {/* Train route toggle */}
-      <button
-        onClick={() => setShowLines(l => !l)}
-        style={{
-          position: 'absolute', top: 12, right: 12, zIndex: 1000,
-          background: showLines ? '#7c3aed' : 'white',
-          color: showLines ? 'white' : '#7c3aed',
-          border: '2px solid #7c3aed',
-          borderRadius: 20, padding: '5px 14px',
-          fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-          fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif',
-        }}
-      >
-        {showLines ? '🚂 Routes On' : '🚂 Routes Off'}
-      </button>
-
+    <div style={{ position: 'relative', height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
     <MapContainer
       center={NY_CENTER}
       zoom={NY_ZOOM}
@@ -339,10 +364,12 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
+        subdomains="abcd"
       />
       <LocationZoom location={userLocation} />
+      <FocusLocation location={focusLocation} />
       <ZoomTracker onZoom={setZoom} />
+      <ResizeHandler />
 
       {/* Amtrak lines */}
       {showLines && trainLines.map(line => (
@@ -378,7 +405,7 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
             eventHandlers={{
               mouseover: () => handleOver(stop.id),
               mouseout:  handleOut,
-              click: () => { if (!blocked) onSelectStop(mtaStopToTripStop(stop)) },
+              click: () => onSelectStop(mtaStopToTripStop(stop)),
             }}
           >
             <Tooltip interactive permanent={hoveredId === stop.id} direction="top" offset={[0, -8]} opacity={1}>
@@ -409,7 +436,7 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
             eventHandlers={{
               mouseover: () => handleOver(city.id),
               mouseout:  handleOut,
-              click: () => { if (!blocked) onSelectStop(cityToTripStop(city)) },
+              click: () => onSelectStop(cityToTripStop(city)),
             }}
           >
             <Tooltip interactive permanent={hoveredId === city.id} direction="top" offset={[0, -13]} opacity={1}>
@@ -424,7 +451,52 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation }: 
           </Marker>
         )
       })}
+      {externalMarkers.map((m, i) => {
+        const isDot = m.iconMode === 'dot'
+        const size = isDot ? (m.highlighted ? 20 : 14) : (m.highlighted ? 42 : 32)
+        const imgSize = m.highlighted ? 26 : 20
+        const border = isDot ? 3 : (m.highlighted ? 3 : 2)
+        const glow = m.highlighted ? `0 0 0 6px ${m.color ?? '#7c3aed'}55, 0 2px 14px rgba(0,0,0,0.45)` : '0 1px 6px rgba(0,0,0,0.45)'
+        const inner = isDot ? '' : (m.icon.startsWith('http') ? `<img src="${m.icon}" style="width:${imgSize}px;height:${imgSize}px;object-fit:contain" />` : `<span style="font-size:${m.highlighted ? 19 : 15}px">${m.icon}</span>`)
+        return (
+          <Marker key={`ext-${i}`} position={[m.lat, m.lng]}
+            zIndexOffset={m.highlighted ? 1000 : 0}
+            icon={L.divIcon({
+              className: '',
+              html: `<div style="background:${m.color ?? '#7c3aed'};border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;box-shadow:${glow};border:${border}px solid white;opacity:${m.dim ? 0.25 : 1};cursor:pointer;transition:all 0.15s ease">${inner}</div>`,
+              iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+            })}
+            eventHandlers={{ click: () => m.id && onMarkerClick?.(m.id) }}>
+            <Tooltip direction="top" offset={[0, -(size / 2 + 4)]} opacity={1} permanent={m.highlighted}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{m.label}</span>
+              {m.id && !m.highlighted && <span style={{ fontSize: 10, color: '#6b7280', display: 'block' }}>Click for details</span>}
+            </Tooltip>
+          </Marker>
+        )
+      })}
     </MapContainer>
+    </div>
+
+    {/* Train route toggle — below the map, bottom right. Only rendered when this
+        component owns the state itself; a controlled caller renders it elsewhere. */}
+    {!isLinesControlled && (
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 10px', background: 'white', flexShrink: 0 }}>
+        <button
+          onClick={toggleLines}
+          style={{
+            background: showLines ? '#7c3aed' : 'white',
+            color: showLines ? 'white' : '#7c3aed',
+            border: '2px solid #7c3aed',
+            borderRadius: 20, padding: '5px 14px',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+            fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif',
+          }}
+        >
+          {showLines ? '🚂 Routes On' : '🚂 Routes Off'}
+        </button>
+      </div>
+    )}
     </div>
   )
 }
