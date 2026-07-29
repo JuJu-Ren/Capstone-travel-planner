@@ -7,7 +7,7 @@ const INTERESTS = [
   { tag: '#arts-culture', label: '🎨 Arts & Culture' },
   { tag: '#shopping',     label: '🛍 Shopping' },
   { tag: '#markets',      label: '🏪 Markets' },
-  { tag: '#events',       label: '🎭 Events' },
+  { tag: '#events',       label: '� Events' },
   { tag: '#nightlife',    label: '🌙 Nightlife' },
   { tag: '#scenic',       label: '🌿 Scenic' },
   { tag: '#hidden-gems',  label: '💎 Hidden Gems' },

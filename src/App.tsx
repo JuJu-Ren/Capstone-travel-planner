@@ -189,7 +189,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string; img: string
   'arts-culture': { label: 'Arts & Culture', icon: '🎨', img: 'https://img.icons8.com/color/96/museum.png',          textQuery: c => `museums art galleries cultural centers historic landmarks ${c}`, visitDuration: '1–3 hrs',   minRating: 4.0 },
   shopping:       { label: 'Shopping',       icon: '🛍', img: 'https://img.icons8.com/color/96/shopping-bag.png',    textQuery: c => `boutiques vintage antique shops local stores bookstores ${c}`,   visitDuration: '1–2 hrs',   minRating: 4.0 },
   markets:        { label: 'Markets',        icon: '🏪', img: 'https://img.icons8.com/color/96/stall.png',           textQuery: c => `farmers market flea market food hall local market ${c}`,         visitDuration: '1–2 hrs',   minRating: 4.0 },
-  events:         { label: 'Events',         icon: '🎭', img: 'https://img.icons8.com/color/96/theatre-mask.png',    textQuery: () => '',                                                               visitDuration: '2–3 hrs' },
+  events:         { label: 'Events',         icon: '�', img: 'https://img.icons8.com/color/96/theatre-mask.png',    textQuery: () => '',                                                               visitDuration: '2–3 hrs' },
   nightlife:      { label: 'Nightlife',      icon: '🌙', img: 'https://img.icons8.com/color/96/cocktail.png',        textQuery: c => `cocktail bars jazz clubs rooftop bars speakeasies ${c}`,         visitDuration: '2–4 hrs',   minRating: 4.0 },
   scenic:         { label: 'Scenic',         icon: '🌿', img: 'https://img.icons8.com/color/96/national-park.png',   textQuery: c => `scenic parks gardens waterfront viewpoints trails ${c}`,         visitDuration: '30–90 min', minRating: 4.0 },
   'hidden-gems':  { label: 'Hidden Gems',    icon: '💎', img: 'https://img.icons8.com/color/96/diamond.png',         textQuery: c => `hidden gems local favorites unique spots secret places ${c}`,    visitDuration: '30–60 min', minRating: 4.0 },
@@ -201,6 +201,162 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string; img: string
 }
 
 const ALL_CATS = Object.keys(CATEGORY_CONFIG)
+
+// ─── Single-color classification icons ────────────────────────────────────────
+// Every category gets a hand-drawn line-art icon (24×24 viewBox) instead of a
+// flat-color emoji, so its color can be tinted to match this category's mapped
+// color everywhere it's used (sidebar, panel headers, list headers, map pins).
+// Shapes are declared once as plain data and rendered either as real JSX (for
+// every React spot) or as a raw SVG markup string (for the Leaflet map pins,
+// which are built from plain HTML strings, not React).
+type IconShape =
+  | { tag: 'path'; d: string; fill?: true }
+  | { tag: 'circle'; cx: number; cy: number; r: number; fill?: true }
+  | { tag: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
+  | { tag: 'line'; x1: number; y1: number; x2: number; y2: number }
+  | { tag: 'rect'; x: number; y: number; width: number; height: number; rx?: number }
+
+const CATEGORY_ICON_SHAPES: Record<string, IconShape[]> = {
+  'fine-dining': [
+    { tag: 'path', d: 'M4 12.5a8 8 0 0 1 16 0' },
+    { tag: 'line', x1: 12, y1: 4.5, x2: 12, y2: 3 },
+    { tag: 'circle', cx: 12, cy: 2.3, r: 0.9 },
+    { tag: 'ellipse', cx: 12, cy: 13, rx: 9.5, ry: 1.6 },
+    { tag: 'path', d: 'M3 15.6c-1 .1-1.9.7-2.4 1.7-.3.6.1 1.3.8 1.4.6.1 1.1-.2 1.4-.7l.9-1.5' },
+    { tag: 'path', d: 'M3 15.6h14c1.1 0 2.1.4 2.8 1.2l1.1 1.2' },
+    { tag: 'circle', cx: 19, cy: 6, r: 2.3 },
+    { tag: 'line', x1: 19, y1: 4.9, x2: 19, y2: 7.1 },
+    { tag: 'line', x1: 17.9, y1: 6, x2: 20.1, y2: 6 },
+  ],
+  'local-food': [
+    { tag: 'path', d: 'M4 12c0 4.4 3.6 8 8 8s8-3.6 8-8' },
+    { tag: 'line', x1: 3, y1: 11, x2: 21, y2: 11 },
+    { tag: 'path', d: 'M9 5c-.6.7-.6 1.6 0 2.3.6.7.6 1.6 0 2.3' },
+    { tag: 'path', d: 'M13 5c-.6.7-.6 1.6 0 2.3.6.7.6 1.6 0 2.3' },
+    { tag: 'line', x1: 16, y1: 9, x2: 20, y2: 4 },
+    { tag: 'line', x1: 17.4, y1: 10.4, x2: 21.4, y2: 5.4 },
+  ],
+  'arts-culture': [
+    { tag: 'path', d: 'M12 3C7 3 3 6.6 3 11c0 4.4 3.4 8 7.7 8 .9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H15a6 6 0 0 0 6-6c0-3-3.6-5.6-9-5.6z' },
+    { tag: 'circle', cx: 7.6, cy: 11, r: 1, fill: true },
+    { tag: 'circle', cx: 9.6, cy: 7.4, r: 1, fill: true },
+    { tag: 'circle', cx: 13.8, cy: 7, r: 1, fill: true },
+    { tag: 'circle', cx: 16.2, cy: 9.8, r: 1, fill: true },
+  ],
+  shopping: [
+    { tag: 'path', d: 'M6.5 8h11l1 12.5h-13L6.5 8z' },
+    { tag: 'path', d: 'M9 8V6.5a3 3 0 0 1 6 0V8' },
+  ],
+  markets: [
+    { tag: 'path', d: 'M3 9l1.4-4h15.2L21 9' },
+    { tag: 'path', d: 'M3 9c0 1.4 1.1 2.4 2.4 2.4S7.8 10.4 7.8 9c0 1.4 1.1 2.4 2.4 2.4S12.6 10.4 12.6 9c0 1.4 1.1 2.4 2.4 2.4S17.4 10.4 17.4 9c0 1.4 1.1 2.4 2.4 2.4' },
+    { tag: 'path', d: 'M4 11.5V20h16v-8.5' },
+    { tag: 'line', x1: 9, y1: 20, x2: 9, y2: 15 },
+    { tag: 'line', x1: 15, y1: 20, x2: 15, y2: 15 },
+  ],
+  events: [
+    { tag: 'circle', cx: 7, cy: 17, r: 2.2, fill: true },
+    { tag: 'circle', cx: 16, cy: 15, r: 2.2, fill: true },
+    { tag: 'line', x1: 9.1, y1: 17, x2: 9.1, y2: 4 },
+    { tag: 'line', x1: 18.1, y1: 15, x2: 18.1, y2: 6 },
+    { tag: 'path', d: 'M9.1 4l9 2v4l-9-2' },
+  ],
+  nightlife: [
+    { tag: 'path', d: 'M5 4h14l-7 8.5L5 4z' },
+    { tag: 'line', x1: 12, y1: 12.5, x2: 12, y2: 20 },
+    { tag: 'line', x1: 8, y1: 20, x2: 16, y2: 20 },
+    { tag: 'line', x1: 7, y1: 4, x2: 9.3, y2: 7.2 },
+  ],
+  scenic: [
+    { tag: 'path', d: 'M2.5 18.5 8 11l3.2 4 3.3-4.4 4.5 8H2.5z' },
+    { tag: 'circle', cx: 7, cy: 6, r: 2 },
+  ],
+  'hidden-gems': [
+    { tag: 'path', d: 'M8 3h8l4 6-10 12L2 9l6-6z' },
+    { tag: 'line', x1: 2, y1: 9, x2: 22, y2: 9 },
+    { tag: 'path', d: 'M10 3 8 9l4 12 4-12-2-6' },
+  ],
+  activities: [
+    { tag: 'line', x1: 7, y1: 12, x2: 17, y2: 12 },
+    { tag: 'rect', x: 2.5, y: 9, width: 3, height: 6, rx: 1 },
+    { tag: 'rect', x: 18.5, y: 9, width: 3, height: 6, rx: 1 },
+    { tag: 'rect', x: 6, y: 7, width: 2, height: 10, rx: 1 },
+    { tag: 'rect', x: 16, y: 7, width: 2, height: 10, rx: 1 },
+  ],
+  coffee: [
+    { tag: 'path', d: 'M4 9h13v5.5A5.5 5.5 0 0 1 11.5 20h-2A5.5 5.5 0 0 1 4 14.5V9z' },
+    { tag: 'path', d: 'M17 10.5h1.8a2.5 2.5 0 0 1 0 5H17' },
+    { tag: 'path', d: 'M8 4.5c-.6.6-.6 1.4 0 2s.6 1.4 0 2' },
+    { tag: 'path', d: 'M12 4.5c-.6.6-.6 1.4 0 2s.6 1.4 0 2' },
+  ],
+  breweries: [
+    { tag: 'path', d: 'M5 8h10v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z' },
+    { tag: 'path', d: 'M15 10.5h2.2A2.3 2.3 0 0 1 19.5 12.8v1.9a2.3 2.3 0 0 1-2.3 2.3H15' },
+    { tag: 'line', x1: 5, y1: 8, x2: 15, y2: 8 },
+    { tag: 'path', d: 'M6 8c0-1.8.9-3.5 2.5-3.5.9 0 1.4.9 2.5.9s1.6-.9 2.5-.9c1.1 0 1.7.7 1.9 1.6' },
+  ],
+  family: [
+    { tag: 'circle', cx: 7.5, cy: 7, r: 2.2 },
+    { tag: 'path', d: 'M3.3 19.5v-1.7A3.6 3.6 0 0 1 6.9 14.2h1.2a3.6 3.6 0 0 1 3.6 3.6v1.7' },
+    { tag: 'circle', cx: 17, cy: 8.3, r: 1.8 },
+    { tag: 'path', d: 'M13.8 19.5V18a2.9 2.9 0 0 1 2.9-2.9h.6a2.9 2.9 0 0 1 2.9 2.9v1.5' },
+  ],
+  wellness: [
+    { tag: 'circle', cx: 12, cy: 6.5, r: 1.8 },
+    { tag: 'path', d: 'M12 8.3v4' },
+    { tag: 'path', d: 'M5 20c0-3.3 3.1-5.7 7-5.7s7 2.4 7 5.7' },
+    { tag: 'path', d: 'M3.5 15.2c2.2 0 4 1.8 4 4' },
+    { tag: 'path', d: 'M20.5 15.2c-2.2 0-4 1.8-4 4' },
+  ],
+}
+
+// Shared helper for every React render spot that shows a classification icon.
+function CategoryIcon({ cat, color, size = 22 }: { cat: string; color: string; size?: number }) {
+  const shapes = CATEGORY_ICON_SHAPES[cat]
+  if (!shapes) return <>{CATEGORY_CONFIG[cat]?.icon}</>
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      {shapes.map((s, i) => {
+        if (s.tag === 'path') return <path key={i} d={s.d} fill={s.fill ? color : 'none'} />
+        if (s.tag === 'circle') return <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={s.fill ? color : 'none'} />
+        if (s.tag === 'ellipse') return <ellipse key={i} cx={s.cx} cy={s.cy} rx={s.rx} ry={s.ry} />
+        if (s.tag === 'rect') return <rect key={i} x={s.x} y={s.y} width={s.width} height={s.height} rx={s.rx} />
+        return <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} />
+      })}
+    </svg>
+  )
+}
+
+// Raw SVG markup (same shape data as CategoryIcon) for embedding into the
+// Leaflet map marker's plain HTML string — pins' circle background is already
+// the category's mapped color, so it's rendered white here for contrast.
+// Sized in "em" units so it scales with the wrapping <span>'s font-size,
+// letting the marker fill more of its circle at both normal and highlighted sizes.
+function categoryIconMarkup(cat: string, color: string): string {
+  const shapes = CATEGORY_ICON_SHAPES[cat]
+  if (!shapes) return CATEGORY_CONFIG[cat]?.icon ?? ''
+  const inner = shapes.map(s => {
+    if (s.tag === 'path') return `<path d="${s.d}" fill="${s.fill ? color : 'none'}"/>`
+    if (s.tag === 'circle') return `<circle cx="${s.cx}" cy="${s.cy}" r="${s.r}" fill="${s.fill ? color : 'none'}"/>`
+    if (s.tag === 'ellipse') return `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${s.rx}" ry="${s.ry}"/>`
+    if (s.tag === 'rect') return `<rect x="${s.x}" y="${s.y}" width="${s.width}" height="${s.height}"${s.rx ? ` rx="${s.rx}"` : ''}/>`
+    return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}"/>`
+  }).join('')
+  return `<svg style="width:1em;height:1em;display:block" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+}
+
+// The "All places" pseudo-category icon (layered stack) — same shape used by
+// the sidebar's "All" button, reused here so the results panel's header/empty
+// state matches it instead of a generic folder emoji.
+function AllPlacesIcon({ size = 20, color = '#2f6fed' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2L22 8V12L12 18L2 12V8L12 2Z" />
+      <path d="M12 8L22 14V18L12 24L2 18V14L12 8Z" opacity="0.7" />
+      <path d="M12 14L22 20V24L12 30L2 24V20L12 14Z" opacity="0.4" />
+    </svg>
+  )
+}
 
 const PRICE_LABELS: Record<string, string> = {
   PRICE_LEVEL_FREE: 'Free', PRICE_LEVEL_INEXPENSIVE: '$',
@@ -703,7 +859,7 @@ User's stated interests and preferences (free text): "${prompt || 'A fun weekend
 User's selected interest tags: ${tagsText}
 Actual weather for these dates: ${weatherSummary}
 
-PERSONALIZATION REQUIREMENT: This itinerary must clearly read as written for THIS specific user, not a generic city guide. Explicitly call out their stated interests/tags by name at least once in the recommendation reasoning, and weave at least one of their interests/tags by name into each stop's introduction and into the day-by-day schedule (e.g. "since you're into #nightlife, ..." or "given your interest in fine dining, ..."). If no interests were given, base personalization on the free-text description instead.
+PERSONALIZATION REQUIREMENT: This itinerary must clearly read as written for THIS specific user, not a generic city guide. Explicitly call out their stated interests/tags by name (as plain words, never with a "#" symbol) at least once in the recommendation reasoning, and weave at least one of their interests/tags by name into each stop's introduction and into the day-by-day schedule (e.g. "since you're into nightlife, ..." or "given your interest in fine dining, ..."). If no interests were given, base personalization on the free-text description instead. Never write out a hashtag (no "#" characters anywhere in your response) — always spell interests out as plain words. Keep every section warm, friendly, and brief — favor short, punchy sentences over long ones.
 
 First, give an overall recommendation for this trip:
 - verdict: "Recommended", "Mixed", or "Not Recommended" — judged by cross-referencing the ACTUAL weather above against the user's stated interests. If the itinerary leans outdoor/hiking-heavy and the weather is hot, humid, stormy, or otherwise harsh, that should pull toward "Mixed" or "Not Recommended." If the plan is mostly indoor (museums, dining, shopping, nightlife) the weather matters much less. If the weather is genuinely pleasant for the planned activities, say so plainly as "Recommended."
@@ -964,7 +1120,7 @@ export default function App() {
           id: e.id,
           lat: e.lat, lng: e.lng,
           name: e.name, category: cat,
-          icon: CATEGORY_CONFIG[cat].img,
+          icon: categoryIconMarkup(cat, '#ffffff'),
           color: CATEGORY_COLORS[cat] ?? '#06b6d4',
           mapsUrl: e.url,
         }))
@@ -973,7 +1129,7 @@ export default function App() {
       id: p.id,
       lat: p.location.latitude, lng: p.location.longitude,
       name: p.displayName.text, category: cat,
-      icon: CATEGORY_CONFIG[cat].img,
+      icon: categoryIconMarkup(cat, '#ffffff'),
       color: CATEGORY_COLORS[cat] ?? '#7c3aed',
       rating: p.rating, address: p.formattedAddress,
       mapsUrl: p.googleMapsUri ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.displayName.text)}`,
@@ -1225,8 +1381,8 @@ export default function App() {
                         ? 'bg-blue-500 border-blue-500 shadow-md'
                         : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                     }`}>
-                    <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '22px', color: color }}>
-                      {cfg.icon}
+                    <div className="w-7 h-7 flex items-center justify-center" style={{ fontSize: '26px', color: color }}>
+                      <CategoryIcon cat={cat} color={color} size={26} />
                     </div>
                     <span className={`text-xs font-semibold leading-tight text-center ${active ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                       {cfg.label.split(' ').map((w, i) => <span key={i} className="block">{w}</span>)}
@@ -1269,9 +1425,9 @@ export default function App() {
             {activeCategory && !panelMinimized && (
               <div className="absolute top-3 left-3 z-[500] bg-white dark:bg-gray-800 rounded-xl px-3 py-1.5 shadow-md border border-gray-100 dark:border-gray-700 flex items-center gap-2 pointer-events-none">
                 {activeCategory === 'all' ? (
-                  <div className="w-5 h-5 flex items-center justify-center" style={{ fontSize: '14px', color: '#2f6fed' }}>🗂</div>
+                  <div className="w-6 h-6 flex items-center justify-center"><AllPlacesIcon size={17} /></div>
                 ) : (
-                  <div className="w-5 h-5 flex items-center justify-center" style={{ fontSize: '14px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}>{CATEGORY_CONFIG[activeCategory]?.icon}</div>
+                  <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '17px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}><CategoryIcon cat={activeCategory} color={CATEGORY_COLORS[activeCategory] || '#7c3aed'} size={17} /></div>
                 )}
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{activeCategory === 'all' ? 'All Places' : catCfg?.label}</span>
                 {activeCategoryCount > 0 && <span className="text-sm bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-full px-1.5 font-bold">{activeCategoryCount}</span>}
@@ -1297,9 +1453,9 @@ export default function App() {
                 {panelMinimized ? (
                   <div className="flex-1 flex flex-col items-center pt-16">
                     {activeCategory === 'all' ? (
-                      <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '20px', color: '#2f6fed' }}>🗂</div>
+                      <div className="w-7 h-7 flex items-center justify-center"><AllPlacesIcon size={24} /></div>
                     ) : (
-                      <div className="w-6 h-6 flex items-center justify-center" style={{ fontSize: '20px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}>{CATEGORY_CONFIG[activeCategory]?.icon}</div>
+                      <div className="w-7 h-7 flex items-center justify-center" style={{ fontSize: '24px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}><CategoryIcon cat={activeCategory} color={CATEGORY_COLORS[activeCategory] || '#7c3aed'} size={24} /></div>
                     )}
                   </div>
                 ) : (
@@ -1307,9 +1463,9 @@ export default function App() {
                     <div className="p-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-2 min-w-0">
                         {activeCategory === 'all' ? (
-                          <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center" style={{ fontSize: '20px', color: '#2f6fed' }}>🗂</div>
+                          <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center"><AllPlacesIcon size={24} /></div>
                         ) : (
-                          <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center" style={{ fontSize: '20px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}>{CATEGORY_CONFIG[activeCategory]?.icon}</div>
+                          <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center" style={{ fontSize: '24px', color: CATEGORY_COLORS[activeCategory] || '#7c3aed' }}><CategoryIcon cat={activeCategory} color={CATEGORY_COLORS[activeCategory] || '#7c3aed'} size={24} /></div>
                         )}
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-800 dark:text-white truncate">{activeCategory === 'all' ? 'All Places' : catCfg?.label}</p>
@@ -1335,7 +1491,7 @@ export default function App() {
                         />
                       ) : activeCategory === 'all' ? (
                         allMapMarkers.length === 0
-                          ? <EmptyState icon="🗂" msg="No places loaded yet — select hashtags and wait a moment" />
+                          ? <EmptyState icon={<AllPlacesIcon size={32} />} msg="No places loaded yet — select hashtags and wait a moment" />
                           : selectedCategories.map(cat => {
                               if (!currentStop) return null
                               const key = `${currentStop.id}::${cat}`
@@ -1345,7 +1501,7 @@ export default function App() {
                               if (catPlaces.length === 0 && catEvents.length === 0) return null
                               return (
                                 <div key={cat}>
-                                  <div className="flex items-center gap-1.5 mb-1.5"><div className="w-4 h-4 flex items-center justify-center" style={{ fontSize: '12px', color: CATEGORY_COLORS[cat] || '#7c3aed' }}>{cfg.icon}</div><p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{cfg.label}</p></div>
+                                  <div className="flex items-center gap-1.5 mb-1.5"><div className="w-5 h-5 flex items-center justify-center" style={{ fontSize: '16px', color: CATEGORY_COLORS[cat] || '#7c3aed' }}><CategoryIcon cat={cat} color={CATEGORY_COLORS[cat] || '#7c3aed'} size={16} /></div><p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{cfg.label}</p></div>
                                   <div className="space-y-2">
                                     {cat === 'events'
                                       ? catEvents.slice(0, 3).map(e => <EventCard key={e.id} event={e} onSelect={setSelectedEvent} />)
@@ -1359,7 +1515,7 @@ export default function App() {
                         [1,2,3].map(i => <div key={i} className="h-28 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)
                       ) : activeCategory === 'events' ? (
                         events.length === 0
-                          ? <EmptyState icon="🎭" msg={
+                          ? <EmptyState icon={<CategoryIcon cat="events" color={CATEGORY_COLORS.events || '#7c3aed'} size={32} />} msg={
                               !startDate
                                 ? 'Add travel dates on the map page to search for events'
                                 : [TM_KEY, EB_KEY, PHQ_KEY].every(k => !k || k.startsWith('your_'))
@@ -1369,7 +1525,7 @@ export default function App() {
                           : events.map(e => <EventCard key={e.id} event={e} onSelect={setSelectedEvent} />)
                       ) : (
                         places.length === 0
-                          ? <EmptyState icon={catCfg?.icon ?? '📍'} msg={!GOOGLE_KEY || GOOGLE_KEY === 'your_google_places_api_key' ? 'Add VITE_GOOGLE_PLACES_KEY to .env' : `No results near ${currentStop?.name}`} />
+                          ? <EmptyState icon={activeCategory && activeCategory !== 'all' ? <CategoryIcon cat={activeCategory} color={CATEGORY_COLORS[activeCategory] || '#7c3aed'} size={32} /> : '📍'} msg={!GOOGLE_KEY || GOOGLE_KEY === 'your_google_places_api_key' ? 'Add VITE_GOOGLE_PLACES_KEY to .env' : `No results near ${currentStop?.name}`} />
                           : (
                             <>
                               <div className="flex items-center justify-between gap-2 pb-1">
@@ -1573,9 +1729,6 @@ export default function App() {
                         ))}
                       </div>
                       <div className="p-4">
-                        <div className="flex flex-wrap gap-1.5 mb-3">
-                          {currentStop.lines.slice(0, 4).map(l => <span key={l} className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded font-medium">{l}</span>)}
-                        </div>
                         <a href={booking.url} target="_blank" rel="noopener noreferrer"
                           className="block text-center text-sm py-2 bg-white dark:bg-gray-600 text-blue-500 border border-blue-200 dark:border-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-semibold">
                           {booking.label} →
@@ -1617,13 +1770,6 @@ export default function App() {
                 )}
                 {itinerary && !itinLoading && (
                   <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800">
-                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">{itinerary.overview}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {itinerary.highlights.map((h, i) => <span key={i} className="text-xs px-2.5 py-1 bg-purple-100 dark:bg-purple-800/50 text-purple-700 dark:text-purple-300 rounded-full font-medium">{h}</span>)}
-                      </div>
-                    </div>
-
                     {currentStop && (() => {
                       const si = itinerary.stops.find(s => s.stopName.toLowerCase().includes(currentStop.name.toLowerCase()) || currentStop.name.toLowerCase().includes(s.stopName.toLowerCase())) ?? itinerary.stops[0]
                       if (!si) return null
@@ -1632,7 +1778,10 @@ export default function App() {
                           <p className="text-base font-bold text-gray-800 dark:text-white">{SYS_ICON[currentStop.system]} {currentStop.name}</p>
 
                           {si.introduction && (
-                            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.introduction}</p>
+                            <div>
+                              <p className="text-xs font-bold text-indigo-500 uppercase tracking-wide mb-1">📜 History</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.introduction}</p>
+                            </div>
                           )}
 
                           {si.landmarks?.length > 0 && (
@@ -1754,7 +1903,7 @@ export default function App() {
                   <input
                     value={chatInput}
                     onChange={e => setChatInput(e.target.value)}
-                    placeholder={`💬 Ask about ${currentStop.name}...`}
+                    placeholder={`Ask about ${currentStop.name}...`}
                     className="flex-1 text-sm px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-full bg-gray-50 dark:bg-gray-700/60 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
                   <button
@@ -1956,7 +2105,7 @@ function TripEditBar({ currentStop, startDate, endDate, onSearch, onCancel }: {
   )
 }
 
-function EmptyState({ icon, msg }: { icon: string; msg: string }) {
+function EmptyState({ icon, msg }: { icon: React.ReactNode; msg: string }) {
   return (
     <div className="text-center py-8">
       <p className="text-2xl mb-2">{icon}</p>
@@ -2050,18 +2199,19 @@ function PlaceCard({ place, visitDuration, googleKey, onSelect, selectable, sele
       )}
       {photo && <img src={photo} alt={place.displayName.text} className="w-full h-24 object-cover" onError={e => (e.currentTarget.style.display='none')} />}
       <div className="p-2.5">
-        <div className="flex justify-between items-start gap-1 mb-1">
-          <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight">{place.displayName.text}</p>
-          {place.priceLevel && <span className="text-sm text-gray-400 flex-shrink-0">{PRICE_LABELS[place.priceLevel] ?? ''}</span>}
-        </div>
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          {place.rating && <span className="text-sm font-bold text-amber-500">⭐ {place.rating.toFixed(1)}</span>}
-          {place.userRatingCount && <span className="text-sm text-gray-400">({place.userRatingCount.toLocaleString()})</span>}
-          {isOpen !== undefined && <span className={`text-sm font-bold ${isOpen ? 'text-green-500' : 'text-red-400'}`}>{isOpen ? '● Open' : '● Closed'}</span>}
+        <div className="flex justify-between items-start gap-1.5 mb-1">
+          <p className="text-sm font-bold text-gray-800 dark:text-white leading-tight min-w-0 truncate">{place.displayName.text}</p>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {place.rating && (
+              <span className="text-sm font-bold text-amber-500 whitespace-nowrap">
+                ⭐ {place.rating.toFixed(1)}{place.userRatingCount ? ` (${place.userRatingCount.toLocaleString()})` : ''}
+              </span>
+            )}
+            {isOpen !== undefined && <span className={`text-sm font-bold whitespace-nowrap ${isOpen ? 'text-green-500' : 'text-red-400'}`}>{isOpen ? '● Open' : '● Closed'}</span>}
+            {place.priceLevel && <span className="text-sm text-gray-400 whitespace-nowrap">{PRICE_LABELS[place.priceLevel] ?? ''}</span>}
+          </div>
         </div>
         {place.formattedAddress && <p className="text-sm text-gray-400 leading-relaxed">{place.formattedAddress}</p>}
-        {visitDuration && <p className="text-sm text-blue-400 mt-0.5">⏱ {visitDuration}</p>}
-        <p className="text-sm text-blue-400 mt-1.5 font-semibold">Tap for details & reviews →</p>
       </div>
     </div>
   )

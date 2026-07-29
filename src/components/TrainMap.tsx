@@ -454,7 +454,7 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
         const imgSize = m.highlighted ? 26 : 20
         const border = isDot ? 3 : (m.highlighted ? 3 : 2)
         const glow = m.highlighted ? `0 0 0 6px ${m.color ?? '#7c3aed'}55, 0 2px 14px rgba(0,0,0,0.45)` : '0 1px 6px rgba(0,0,0,0.45)'
-        const inner = isDot ? '' : (m.icon.startsWith('http') ? `<img src="${m.icon}" style="width:${imgSize}px;height:${imgSize}px;object-fit:contain" />` : `<span style="font-size:${m.highlighted ? 19 : 15}px">${m.icon}</span>`)
+        const inner = isDot ? '' : (m.icon.startsWith('http') ? `<img src="${m.icon}" style="width:${imgSize}px;height:${imgSize}px;object-fit:contain" />` : `<span style="font-size:${m.highlighted ? 27 : 21}px">${m.icon}</span>`)
         return (
           <Marker key={`ext-${i}`} position={[m.lat, m.lng]}
             zIndexOffset={m.highlighted ? 1000 : 0}
