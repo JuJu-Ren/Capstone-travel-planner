@@ -222,7 +222,7 @@ export default function PromptSection({ selectedStops, onGenerate, onClearStop, 
         </div>
 
         {/* Prompt */}
-        <div className="relative mb-2 max-w-2xl">
+        <div className="relative mb-2">
           <div className="flex items-center gap-2 mb-2">
             <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Tell us what you'd like to explore</label>
             <div className="relative">

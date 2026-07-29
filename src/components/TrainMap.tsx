@@ -71,13 +71,11 @@ interface CardProps {
 
 function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, keepOpen, startClose }: CardProps) {
   const [photos, setPhotos] = useState<string[]>([])
-  const [idx, setIdx] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
     setLoading(true)
-    setIdx(0)
     fetchWikimediaPhotos(name, system).then(p => {
       if (alive) { setPhotos(p); setLoading(false) }
     })
@@ -86,16 +84,7 @@ function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, ke
 
   const ICON: Record<string, string> = { Amtrak: '🚂', LIRR: '🚋', MetroNorth: '🚉', PATH: '🚇' }
   const sysLabel = system === 'MetroNorth' ? 'Metro-North' : system
-
-  const prev = (e: React.MouseEvent) => { e.stopPropagation(); setIdx(i => Math.max(0, i - 1)) }
-  const nxt  = (e: React.MouseEvent) => { e.stopPropagation(); setIdx(i => Math.min(photos.length - 1, i + 1)) }
-
-  const btnBase: React.CSSProperties = {
-    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 4,
-    color: 'white', padding: '4px 9px', fontSize: 17, lineHeight: 1,
-    cursor: 'pointer', transition: 'opacity .15s',
-  }
+  const gridPhotos = photos.slice(0, 3)
 
   return (
     <div
@@ -110,68 +99,56 @@ function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, ke
         boxShadow: '0 4px 20px rgba(0,0,0,.18)',
       }}
     >
-      {/* ── Photo zone ── */}
-      <div style={{ position: 'relative', height: 130, background: '#e2e8f0', overflow: 'hidden' }}>
+      {/* ── Photo zone: 3-up grid, each cell half the old single-photo height ── */}
+      <div style={{ position: 'relative', height: 65, background: '#e2e8f0', overflow: 'hidden' }}>
         {loading ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 12, gap: 6 }}>
-            <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid #cbd5e1', borderTopColor: '#3b82f6', borderRadius: '50%' }} />
-            Loading photos…
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 10.5, gap: 5 }}>
+            <span style={{ display: 'inline-block', width: 11, height: 11, border: '2px solid #cbd5e1', borderTopColor: '#3b82f6', borderRadius: '50%' }} />
+            Loading…
           </div>
-        ) : photos.length === 0 ? (
+        ) : gridPhotos.length === 0 ? (
           <>
             <img
               src={`https://picsum.photos/seed/${encodeURIComponent(name)}/480/260`}
               alt={name}
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: 'brightness(0.75)' }}
             />
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11, textAlign: 'center', padding: '0 18px', textShadow: '0 1px 3px rgba(0,0,0,.6)' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, textAlign: 'center', padding: '0 14px', textShadow: '0 1px 3px rgba(0,0,0,.6)' }}>
               {name}
             </div>
           </>
         ) : (
-          <>
-            <img
-              src={photos[idx]}
-              alt={name}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-            {photos.length > 1 && (
-              <>
-                <button onClick={prev} disabled={idx === 0}
-                  style={{ ...btnBase, left: 5, opacity: idx === 0 ? 0.25 : 0.85 }}>‹</button>
-                <button onClick={nxt} disabled={idx === photos.length - 1}
-                  style={{ ...btnBase, right: 5, opacity: idx === photos.length - 1 ? 0.25 : 0.85 }}>›</button>
-                <div style={{
-                  position: 'absolute', bottom: 6, right: 8,
-                  background: 'rgba(0,0,0,.55)', borderRadius: 8,
-                  padding: '1px 7px', fontSize: 10, color: 'white', fontWeight: 600,
-                }}>
-                  {idx + 1} / {photos.length}
-                </div>
-              </>
-            )}
-            <div style={{ position: 'absolute', bottom: 6, left: 8, fontSize: 9, color: 'rgba(255,255,255,.7)' }}>
-              📷 Wikimedia Commons
-            </div>
-          </>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, height: '100%' }}>
+            {Array.from({ length: 3 }).map((_, i) => (
+              gridPhotos[i]
+                ? <img key={i} src={gridPhotos[i]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                : <div key={i} style={{ width: '100%', height: '100%', background: '#e2e8f0' }} />
+            ))}
+          </div>
         )}
       </div>
 
       {/* ── Info zone ── */}
-      <div style={{ padding: '9px 11px 11px', background: 'white' }}>
-        <p style={{ fontWeight: 800, fontSize: 13.5, margin: '0 0 3px', color: '#0f172a', letterSpacing: '0.01em' }}>{name}</p>
-        <p style={{ fontSize: 11, margin: '0 0 2px', fontWeight: 700, color }}>
-          {ICON[system] ?? '🚂'} {sysLabel}
-        </p>
-        {lines.length > 0 && (
-          <p style={{ fontSize: 10, margin: '0 0 6px', color: '#94a3b8' }}>{lines.slice(0, 2).join(' · ')}</p>
-        )}
-        <p style={{
-          fontSize: 11, margin: 0, fontWeight: 700,
-          color: selected ? '#d97706' : '#3b82f6',
-        }}>
-          {selected ? `✓ ${name} selected · click to remove` : 'Click marker to add to trip'}
-        </p>
+      <div style={{ padding: '7px 11px 9px', background: 'white' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 }}>
+          <p style={{ fontWeight: 800, fontSize: 12.5, margin: 0, color: '#0f172a', letterSpacing: '0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
+          <p style={{
+            fontSize: 9.5, margin: 0, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+            color: selected ? '#d97706' : '#3b82f6',
+          }}>
+            {selected ? '✓ Selected · click to remove' : 'Click to add'}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 3 }}>
+          <p style={{ fontSize: 10.5, margin: 0, fontWeight: 700, color, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {ICON[system] ?? '🚂'} {sysLabel}
+          </p>
+          {lines.length > 0 && (
+            <p style={{ fontSize: 9.5, margin: 0, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {lines.slice(0, 2).join(' · ')}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -179,68 +156,71 @@ function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, ke
 
 // ─── Marker icon builders ─────────────────────────────────────────────────────
 
-function makeStationPill(name: string, color: string, selected: boolean, selIdx: number): L.DivIcon {
+// Both pills used to size their outer Leaflet icon box from a rough
+// characters-times-average-width guess, then filled it with a `display:flex`
+// div — a block-level box that *stretches* to whatever width it's given
+// rather than shrink-wrapping its text. Any slack in that guess (and there
+// was a lot — measured 30-50px of dead space per pill) showed up as visible
+// empty padding, since the border/background belonged to the stretched div,
+// not the text. Fixed by giving the outer box a fixed, generous upper bound
+// and letting an `inline-flex` inner pill shrink-wrap its own content —
+// perfectly tight to the label regardless of font metrics, with the
+// oversized outer box kept invisible (transparent, no pointer-events) and
+// only used so Leaflet has room to center it without ever clipping text.
+const PILL_BOX_W = 220
+
+function makeStationPill(name: string, _color: string, selected: boolean, _selIdx: number): L.DivIcon {
   const bg    = selected ? '#fffbeb' : '#ffffff'
   const bdr   = selected ? '#f59e0b' : '#7c3aed'
   const txt   = selected ? '#78350f' : '#0f172a'
-  const dot   = selected ? '#f59e0b' : '#7c3aed'
   const label = name.length > 20 ? name.slice(0, 20) + '…' : name
-  const w     = Math.min(label.length * 7.8 + 34, 190)
 
   return L.divIcon({
     className: '',
-    html: `<div style="
-      display:flex;align-items:center;gap:5px;
-      background:${bg};border:2px solid ${bdr};border-radius:20px;
-      padding:4px 11px 4px 7px;
-      box-shadow:0 2px 10px rgba(0,0,0,.32),0 0 0 1px rgba(0,0,0,.06);
-      cursor:pointer;white-space:nowrap;
-      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-    ">
-      <span style="
-        width:11px;height:11px;border-radius:50%;
-        background:${dot};border:1.5px solid rgba(0,0,0,.14);
-        display:inline-flex;align-items:center;justify-content:center;
-        font-size:8px;font-weight:900;color:white;flex-shrink:0;
-      ">${selected ? selIdx : ''}</span>
-      <span style="
-        font-size:12px;font-weight:700;color:${txt};
-        letter-spacing:0.015em;
-      ">${label}</span>
+    html: `<div style="width:${PILL_BOX_W}px;height:26px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+      <div style="
+        display:inline-flex;align-items:center;pointer-events:auto;
+        background:${bg};border:2px solid ${bdr};border-radius:20px;
+        padding:4px 11px;
+        box-shadow:0 2px 10px rgba(0,0,0,.32),0 0 0 1px rgba(0,0,0,.06);
+        cursor:pointer;white-space:nowrap;
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+      ">
+        <span style="
+          font-size:12px;font-weight:700;color:${txt};
+          letter-spacing:0.015em;
+        ">${label}</span>
+      </div>
     </div>`,
-    iconSize: [w, 26],
-    iconAnchor: [w / 2, 13],
+    iconSize: [PILL_BOX_W, 26],
+    iconAnchor: [PILL_BOX_W / 2, 13],
   })
 }
 
-function makeHubPill(name: string, color: string, selected: boolean, selIdx: number): L.DivIcon {
+function makeHubPill(name: string, _color: string, selected: boolean, _selIdx: number): L.DivIcon {
   const bg  = selected ? '#fffbeb' : '#ffffff'
   const bdr = selected ? '#f59e0b' : '#7c3aed'
   const txt = selected ? '#78350f' : '#1e293b'
-  const dot = selected ? '#f59e0b' : '#7c3aed'
   const label = name.length > 17 ? name.slice(0, 17) + '…' : name
-  const w   = Math.min(label.length * 7 + 26, 155)
 
   return L.divIcon({
     className: '',
-    html: `<div style="
-      display:flex;align-items:center;gap:4px;
-      background:${bg};border:1.5px solid ${bdr};border-radius:12px;
-      padding:2px 7px 2px 5px;
-      box-shadow:0 1px 6px rgba(0,0,0,.26),0 0 0 1px rgba(0,0,0,.05);
-      cursor:pointer;white-space:nowrap;
-      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-    ">
-      <span style="
-        width:8px;height:8px;border-radius:50%;
-        background:${dot};flex-shrink:0;
-      "></span>
-      <span style="
-        font-size:10.5px;font-weight:700;color:${txt};
-      ">${selected ? selIdx + '·' : ''}${label}</span>
+    html: `<div style="width:${PILL_BOX_W}px;height:20px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+      <div style="
+        display:inline-flex;align-items:center;pointer-events:auto;
+        background:${bg};border:1.5px solid ${bdr};border-radius:12px;
+        padding:2px 7px;
+        box-shadow:0 1px 6px rgba(0,0,0,.26),0 0 0 1px rgba(0,0,0,.05);
+        cursor:pointer;white-space:nowrap;
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+      ">
+        <span style="
+          font-size:10.5px;font-weight:700;color:${txt};
+        ">${label}</span>
+      </div>
     </div>`,
-    iconSize: [w, 20],
-    iconAnchor: [w / 2, 10],
+    iconSize: [PILL_BOX_W, 20],
+    iconAnchor: [PILL_BOX_W / 2, 10],
   })
 }
 
@@ -327,6 +307,7 @@ function ResizeHandler() {
 export default function TrainMap({ selectedStops, onSelectStop, userLocation, externalMarkers = [], focusLocation, onMarkerClick, showLines: showLinesProp, onToggleLines }: Props) {
   const [zoom, setZoom] = useState(NY_ZOOM)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [pinnedId, setPinnedId] = useState<string | null>(null)
   const [showLinesState, setShowLinesState] = useState(true)
   const isLinesControlled = showLinesProp !== undefined
   const showLines = isLinesControlled ? showLinesProp : showLinesState
@@ -348,6 +329,22 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
   }
   const handleOver = (id: string) => { keepOpen(); setHoveredId(id) }
   const handleOut  = () => startClose()
+  const togglePin  = (id: string) => setPinnedId(p => p === id ? null : id)
+
+  // Clicking a station pins its popup open so the user can browse photos at
+  // their own pace; clicking anywhere that isn't the pinned popup or another
+  // marker closes it. Marker clicks are excluded here since they set the pin
+  // themselves (and this document-level listener fires after that, on bubble).
+  useEffect(() => {
+    if (!pinnedId) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('.leaflet-tooltip') || target.closest('.leaflet-marker-icon')) return
+      setPinnedId(null)
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [pinnedId])
 
   return (
     <div style={{ position: 'relative', height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -405,11 +402,11 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
             eventHandlers={{
               mouseover: () => handleOver(stop.id),
               mouseout:  handleOut,
-              click: () => onSelectStop(mtaStopToTripStop(stop)),
+              click: () => { onSelectStop(mtaStopToTripStop(stop)); togglePin(stop.id) },
             }}
           >
-            <Tooltip interactive permanent={hoveredId === stop.id} direction="top" offset={[0, -8]} opacity={1}>
-              {hoveredId === stop.id ? (
+            <Tooltip key={pinnedId === stop.id ? 'pinned' : hoveredId === stop.id ? 'hovered' : 'idle'} interactive permanent={hoveredId === stop.id || pinnedId === stop.id} direction="top" offset={[0, -8]} opacity={1}>
+              {hoveredId === stop.id || pinnedId === stop.id ? (
                 <TooltipCard
                   name={stop.name} system={stop.system} lines={stop.lines}
                   color={color} selected={sel} selIdx={idx + 1} blocked={blocked}
@@ -436,11 +433,11 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
             eventHandlers={{
               mouseover: () => handleOver(city.id),
               mouseout:  handleOut,
-              click: () => onSelectStop(cityToTripStop(city)),
+              click: () => { onSelectStop(cityToTripStop(city)); togglePin(city.id) },
             }}
           >
-            <Tooltip interactive permanent={hoveredId === city.id} direction="top" offset={[0, -13]} opacity={1}>
-              {hoveredId === city.id ? (
+            <Tooltip key={pinnedId === city.id ? 'pinned' : hoveredId === city.id ? 'hovered' : 'idle'} interactive permanent={hoveredId === city.id || pinnedId === city.id} direction="top" offset={[0, -13]} opacity={1}>
+              {hoveredId === city.id || pinnedId === city.id ? (
                 <TooltipCard
                   name={city.name} system="Amtrak" lines={city.lines}
                   color="#2563eb" selected={sel} selIdx={idx + 1} blocked={blocked}
