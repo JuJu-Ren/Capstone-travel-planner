@@ -8,12 +8,15 @@ import type { TripStop } from '../data/types'
 
 const NY_CENTER: [number, number] = [40.80, -73.90]
 const NY_ZOOM = 9
-const US_BOUNDS: L.LatLngBoundsExpression = [[24.0, -125.0], [49.5, -66.0]]
+// Full world extent (not just the US) — loose enough to let users pan/zoom
+// anywhere on the globe, just tight enough that dragging can't scroll past
+// the poles/antimeridian into empty repeated space.
+const WORLD_BOUNDS: L.LatLngBoundsExpression = [[-90, -180], [90, 180]]
 
 // ─── Wikimedia photo fetcher ──────────────────────────────────────────────────
 
 const _photoCache: Record<string, string[]> = {}
-const _inFlight: Record<string, Promise<string[]>> = {}
+const _inFlight: Partial<Record<string, Promise<string[]>>> = {}
 
 async function fetchWikimediaPhotos(name: string, system: string): Promise<string[]> {
   const key = `${system}:${name}`
@@ -69,7 +72,7 @@ interface CardProps {
   keepOpen: () => void; startClose: () => void
 }
 
-function TooltipCard({ name, system, lines, color, selected, selIdx, blocked, keepOpen, startClose }: CardProps) {
+function TooltipCard({ name, system, lines, color, selected, keepOpen, startClose }: CardProps) {
   const [photos, setPhotos] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -352,9 +355,9 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
     <MapContainer
       center={NY_CENTER}
       zoom={NY_ZOOM}
-      maxBounds={US_BOUNDS}
+      maxBounds={WORLD_BOUNDS}
       maxBoundsViscosity={1.0}
-      minZoom={5}
+      minZoom={2}
       maxZoom={15}
       style={{ height: '100%', width: '100%' }}
     >

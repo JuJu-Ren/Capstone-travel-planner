@@ -358,6 +358,19 @@ function AllPlacesIcon({ size = 20, color = '#2f6fed' }: { size?: number; color?
   )
 }
 
+// Solid blue label box for AI itinerary subtitles, matching the main location
+// pin icon's blue (#2f6fed) instead of the previous per-section emoji + color.
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-block text-xs font-bold text-white uppercase tracking-wide px-2.5 py-1 rounded-md mb-2"
+      style={{ background: '#2f6fed' }}
+    >
+      {children}
+    </span>
+  )
+}
+
 const PRICE_LABELS: Record<string, string> = {
   PRICE_LEVEL_FREE: 'Free', PRICE_LEVEL_INEXPENSIVE: '$',
   PRICE_LEVEL_MODERATE: '$$', PRICE_LEVEL_EXPENSIVE: '$$$', PRICE_LEVEL_VERY_EXPENSIVE: '$$$$',
@@ -369,8 +382,6 @@ const BOOKING_LINKS: Record<string, { label: string; url: string }> = {
   PATH:       { label: 'PATH Fares & Schedules',    url: 'https://www.panynj.gov/path/en/index.html' },
   Amtrak:     { label: 'View Routes on Amtrak.com', url: 'https://www.amtrak.com' },
 }
-
-const SYS_ICON: Record<string, string> = { LIRR: '🚋', MetroNorth: '🚉', PATH: '🚇', Amtrak: '🚂', Custom: '📍' }
 
 // ─── API fetchers ─────────────────────────────────────────────────────────────
 
@@ -929,7 +940,7 @@ export default function App() {
   const [selectedStops, setSelectedStops] = useState<TripStop[]>([])
   const [showLines, setShowLines] = useState(true)
   const [prompt, setPrompt]             = useState('')
-  const [model, setModel]               = useState<GeminiModel>('gemini-2.5-flash')
+  const [model, setModel]               = useState<GeminiModel>('gemini-3.5-flash')
   const [startDate, setStartDate]       = useState('')
   const [endDate, setEndDate]           = useState('')
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
@@ -983,6 +994,7 @@ export default function App() {
   const [savedLists, setSavedLists]     = useState<Record<string, SavedPlaceList>>(() => loadSavedLists())
   const [showSavedPlaces, setShowSavedPlaces] = useState(false)
   const [saveConfirmation, setSaveConfirmation] = useState<string | null>(null)
+  const [pendingSavePlaces, setPendingSavePlaces] = useState<GooglePlace[] | null>(null)
   const [placeCache, setPlaceCache]   = useState<Record<string, GooglePlace[]>>({})
   const [eventCache, setEventCache]   = useState<Record<string, UnifiedEvent[]>>({})
   const [loadingKey, setLoadingKey]   = useState<string | null>(null)
@@ -1215,7 +1227,7 @@ export default function App() {
     })
   }
 
-  const handleSaveSelectedPlaces = (places: GooglePlace[]) => {
+  const saveSelectedPlacesNow = (places: GooglePlace[]) => {
     if (places.length === 0 || !currentStop) return
     const locationName = currentStop.name
     setSavedLists(prev => {
@@ -1232,6 +1244,29 @@ export default function App() {
     setSaveConfirmation(`Saved ${places.length} place${places.length > 1 ? 's' : ''} to "${locationName}"`)
     setTimeout(() => setSaveConfirmation(null), 2500)
   }
+
+  // "Save" requires being signed in — if not signed in yet, remember the
+  // selection and trigger Google sign-in; the effect below auto-saves it as
+  // soon as sign-in completes instead of making the user click Save again.
+  const handleSaveSelectedPlaces = (places: GooglePlace[]) => {
+    if (places.length === 0) return
+    if (!googleUser) {
+      setPendingSavePlaces(places)
+      signInContainerRef.current?.querySelector<HTMLElement>('[role="button"]')?.click()
+      return
+    }
+    saveSelectedPlacesNow(places)
+  }
+
+  // As soon as sign-in completes, auto-save whatever selection was pending —
+  // the user shouldn't have to click "Save" again after signing in.
+  useEffect(() => {
+    if (googleUser && pendingSavePlaces) {
+      saveSelectedPlacesNow(pendingSavePlaces)
+      setPendingSavePlaces(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleUser, pendingSavePlaces])
 
   const handleRemoveSavedPlace = (locationName: string, placeId: string) => {
     setSavedLists(prev => {
@@ -1774,22 +1809,22 @@ export default function App() {
                       const si = itinerary.stops.find(s => s.stopName.toLowerCase().includes(currentStop.name.toLowerCase()) || currentStop.name.toLowerCase().includes(s.stopName.toLowerCase())) ?? itinerary.stops[0]
                       if (!si) return null
                       return (
-                        <div className="bg-white dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600 p-4 space-y-4 divide-y divide-gray-100 dark:divide-gray-600 [&>*+*]:pt-4">
-                          <p className="text-base font-bold text-gray-800 dark:text-white">{SYS_ICON[currentStop.system]} {currentStop.name}</p>
-
+                        <div className="bg-white dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600 p-4 space-y-4">
                           {si.introduction && (
                             <div>
-                              <p className="text-xs font-bold text-indigo-500 uppercase tracking-wide mb-1">📜 History</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.introduction}</p>
+                              <SectionLabel>History</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3">
+                                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.introduction}</p>
+                              </div>
                             </div>
                           )}
 
                           {si.landmarks?.length > 0 && (
                             <div>
-                              <p className="text-xs font-bold text-purple-500 uppercase tracking-wide mb-2">📍 Worth Visiting</p>
-                              <div className="space-y-2">
+                              <SectionLabel>Worth Visiting</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3 space-y-2">
                                 {si.landmarks.slice(0, 4).map((l, i) => (
-                                  <div key={i} className="bg-purple-50/60 dark:bg-purple-900/10 rounded-lg px-2.5 py-2">
+                                  <div key={i}>
                                     <p className="text-sm font-semibold text-gray-800 dark:text-white">{l.name}</p>
                                     <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{l.story}</p>
                                   </div>
@@ -1800,25 +1835,29 @@ export default function App() {
 
                           {si.gettingAround && (
                             <div>
-                              <p className="text-xs font-bold text-blue-500 uppercase tracking-wide mb-1">🚇 Getting Around</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.gettingAround}</p>
+                              <SectionLabel>Getting Around</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3">
+                                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.gettingAround}</p>
+                              </div>
                             </div>
                           )}
 
                           {si.whatToWear && (
                             <div>
-                              <p className="text-xs font-bold text-teal-500 uppercase tracking-wide mb-1">👕 What to Wear</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.whatToWear}</p>
+                              <SectionLabel>What to Wear</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3">
+                                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{si.whatToWear}</p>
+                              </div>
                             </div>
                           )}
 
                           {si.hikingRoutes?.length > 0 && (
                             <div>
-                              <p className="text-xs font-bold text-green-600 uppercase tracking-wide mb-2">🥾 Hiking Routes</p>
-                              <div className="space-y-2">
+                              <SectionLabel>Hiking Routes</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3 space-y-2">
                                 {si.hikingRoutes.map((h, i) => (
-                                  <div key={i} className="bg-green-50/60 dark:bg-green-900/10 rounded-lg px-2.5 py-2">
-                                    <p className="text-sm"><span className="font-semibold text-gray-800 dark:text-white">{h.name}</span> <span className="text-xs font-bold text-green-600 dark:text-green-400">({h.difficulty})</span></p>
+                                  <div key={i}>
+                                    <p className="text-sm"><span className="font-semibold text-gray-800 dark:text-white">{h.name}</span> <span className="text-xs font-bold text-gray-500 dark:text-gray-400">({h.difficulty})</span></p>
                                     <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{h.description}</p>
                                   </div>
                                 ))}
@@ -1828,39 +1867,43 @@ export default function App() {
 
                           {si.localSpecialties?.length > 0 && (
                             <div>
-                              <p className="text-xs font-bold text-orange-500 uppercase tracking-wide mb-1.5">🍴 Try Locally</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {si.localSpecialties.map((s, i) => (
-                                  <span key={i} className="text-xs font-medium px-2.5 py-1 bg-orange-100 dark:bg-orange-800/30 text-orange-700 dark:text-orange-300 rounded-full">{s}</span>
-                                ))}
+                              <SectionLabel>Try Locally</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {si.localSpecialties.map((s, i) => (
+                                    <span key={i} className="text-xs font-medium px-2.5 py-1 bg-white dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 rounded-full border border-gray-200 dark:border-gray-600">{s}</span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           )}
 
                           <div>
-                            <p className="text-xs font-bold text-purple-500 uppercase tracking-wide mb-2">📅 Day-by-Day</p>
-                            <div className="grid grid-cols-2 gap-4">
-                              {si.days.map((items, dayIdx)=>(
-                                <div key={dayIdx}>
-                                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Day {dayIdx + 1}</p>
-                                  <div className="space-y-2 border-l-2 border-purple-200 dark:border-purple-700 pl-2.5">
-                                    {items.slice(0,4).map((item,i)=>(
-                                      <div key={i}>
-                                        <span className="text-xs font-bold text-purple-400">{item.time}</span>
-                                        <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug">{item.activity}</p>
-                                      </div>
-                                    ))}
+                            <SectionLabel>Day-by-Day</SectionLabel>
+                            <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3">
+                              <div className="grid grid-cols-2 gap-4">
+                                {si.days.map((items, dayIdx)=>(
+                                  <div key={dayIdx}>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Day {dayIdx + 1}</p>
+                                    <div className="space-y-2 border-l-2 border-blue-200 dark:border-blue-700 pl-2.5">
+                                      {items.slice(0,4).map((item,i)=>(
+                                        <div key={i}>
+                                          <span className="text-xs font-bold text-blue-500">{item.time}</span>
+                                          <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug">{item.activity}</p>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
                           </div>
 
                           {si.localTips.length > 0 && (
                             <div>
-                              <p className="text-xs font-bold text-amber-500 uppercase tracking-wide mb-1.5">💡 Local Tips</p>
-                              <div className="space-y-1">
-                                {si.localTips.slice(0,3).map((t,i)=><p key={i} className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">💬 {t}</p>)}
+                              <SectionLabel>Local Tips</SectionLabel>
+                              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3 space-y-1">
+                                {si.localTips.slice(0,3).map((t,i)=><p key={i} className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{t}</p>)}
                               </div>
                             </div>
                           )}
@@ -1869,13 +1912,13 @@ export default function App() {
                     })()}
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 border border-green-100 dark:border-green-800">
-                        <p className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wide mb-1">☀️ Best Time</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{itinerary.bestTimeToGo}</p>
+                      <div className="rounded-xl p-3 bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-gray-700">
+                        <SectionLabel>Best Time</SectionLabel>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{itinerary.bestTimeToGo}</p>
                       </div>
-                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-100 dark:border-blue-800">
-                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">🎒 Pack</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{itinerary.packingList.slice(0,4).join(' · ')}</p>
+                      <div className="rounded-xl p-3 bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-gray-700">
+                        <SectionLabel>Pack</SectionLabel>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{itinerary.packingList.slice(0,4).join(' · ')}</p>
                       </div>
                     </div>
                   </div>
@@ -2179,7 +2222,7 @@ function SavedPlacesModal({ show, onClose, savedLists, onRemovePlace, onRemoveFo
   )
 }
 
-function PlaceCard({ place, visitDuration, googleKey, onSelect, selectable, selected, onToggleSelect, onHoverChange }: { place: GooglePlace; visitDuration?: string; googleKey: string; onSelect?: (p: GooglePlace) => void; selectable?: boolean; selected?: boolean; onToggleSelect?: (id: string) => void; onHoverChange?: (id: string | null) => void }) {
+function PlaceCard({ place, googleKey, onSelect, selectable, selected, onToggleSelect, onHoverChange }: { place: GooglePlace; visitDuration?: string; googleKey: string; onSelect?: (p: GooglePlace) => void; selectable?: boolean; selected?: boolean; onToggleSelect?: (id: string) => void; onHoverChange?: (id: string | null) => void }) {
   const photo  = place.photos?.[0]?.name ? `https://places.googleapis.com/v1/${place.photos[0].name}/media?maxHeightPx=300&key=${googleKey}` : null
   const isOpen = place.regularOpeningHours?.openNow
   return (
