@@ -1,3 +1,5 @@
+https://juju-ren.github.io/Capstone-travel-planner/
+
 # TravelPlanner Web UI
 
 A modern, responsive web-based travel planning interface built with React, TypeScript, and Tailwind CSS.
