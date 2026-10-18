@@ -362,9 +362,8 @@ export default function TrainMap({ selectedStops, onSelectStop, userLocation, ex
       style={{ height: '100%', width: '100%' }}
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        subdomains="abcd"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <LocationZoom location={userLocation} />
       <FocusLocation location={focusLocation} />
